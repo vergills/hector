@@ -1,2 +1,55 @@
 # hector
 That dude from the Fast movies, but as a bot.
+
+## Project structure
+
+- `cmd/hector` – application entry point
+- `internal/config` – environment config loading
+- `internal/bot` – Discord command handling, context lookups, and prompt assembly
+- `internal/gemini` – Gemini API client
+- `.env.example` – template for required environment variables
+
+## Setup
+
+1. Copy `.env.example` to `.env`
+2. Fill in your Discord bot token and Gemini API key
+3. Adjust the optional config values if needed
+4. Run:
+
+```bash
+go run ./cmd/hector
+```
+
+## Configuration
+
+The app reads the following values from `.env` or the shell environment:
+
+- `DISCORD_TOKEN` – Discord bot token
+- `GEMINI_API_KEY` – Gemini API key
+- `GEMINI_MODEL` – default `gemini-3.5-flash-lite`; requests use Gemini’s Interactions API
+- `BOT_PREFIX` – default `h`
+- `MAX_CONTEXT_MESSAGES` – default `8`; used for `h ctx <N> ...`
+- `SYSTEM_PROMPT` – system prompt sent to Gemini
+- `HELP_TEXT` – text shown when the user sends a blank prompt
+- `MAX_RESPONSE_CHARS` – max output length, default `700`
+- `MAX_OUTPUT_TOKENS` – Gemini output-token ceiling, default `512`; optional thinking is disabled to preserve room for the visible response
+
+## Usage
+
+Use either the configured prefix or a mention:
+
+```text
+h hello
+@hector hello
+```
+
+For a context-aware lookup, use the explicit context subcommand. It looks back through the last N messages in the active channel before answering:
+
+```text
+h ctx 5 summarize what we discussed
+@hector ctx 3 what did we decide earlier?
+```
+
+If you do not use `ctx`, the bot responds using the current message only, with no automatic background history lookup. This keeps normal responses fast while still allowing deeper lookups when needed.
+
+The bot also trims output to the configured `MAX_RESPONSE_CHARS` value so it does not burn through token budget.
