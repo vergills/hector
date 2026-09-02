@@ -270,7 +270,7 @@ func (s *Service) reactToMessage(session *discordgo.Session, message *discordgo.
 		return
 	}
 	lower := strings.ToLower(prompt)
-	emoji := "✅"
+	var emoji string
 	switch {
 	case strings.Contains(lower, "hello") || strings.Contains(lower, "hi") || strings.Contains(lower, "hey"):
 		emoji = "👋"
@@ -282,6 +282,9 @@ func (s *Service) reactToMessage(session *discordgo.Session, message *discordgo.
 		emoji = "🤔"
 	case strings.Contains(lower, "bug") || strings.Contains(lower, "error") || strings.Contains(lower, "broken"):
 		emoji = "🛠️"
+	}
+	if emoji == "" {
+		return
 	}
 	_ = session.MessageReactionAdd(message.ChannelID, message.ID, emoji)
 }
