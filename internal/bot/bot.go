@@ -84,6 +84,12 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 
 	content := messageTextForPrompt(message.Message)
 	if content == "" {
+		if hydrated, err := session.ChannelMessage(message.ChannelID, message.ID); err == nil && hydrated != nil {
+			message.Message = hydrated
+			content = messageTextForPrompt(message.Message)
+		}
+	}
+	if content == "" {
 		return
 	}
 
@@ -117,7 +123,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 			return
 		}
 		for _, block := range splitDiscordMessage(response) {
-			s.rememberReply(session, message.ChannelID, block)
+			s.rememberReply(session, message.ChannelID, block, ctxPrompt, contextText)
 			time.Sleep(200 * time.Millisecond)
 		}
 		return
@@ -146,7 +152,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 	for _, block := range splitDiscordMessage(response) {
-		s.rememberReply(session, message.ChannelID, block)
+		s.rememberReply(session, message.ChannelID, block, prompt, replyContext)
 		time.Sleep(200 * time.Millisecond)
 	}
 }
@@ -348,6 +354,14 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 		if embed.URL != "" {
 			pieces = append(pieces, embed.URL)
 		}
+		if embed.Author != nil {
+			if embed.Author.Name != "" {
+				pieces = append(pieces, embed.Author.Name)
+			}
+			if embed.Author.URL != "" {
+				pieces = append(pieces, embed.Author.URL)
+			}
+		}
 		for _, field := range embed.Fields {
 			if field.Name != "" {
 				pieces = append(pieces, field.Name)
@@ -355,6 +369,9 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 			if field.Value != "" {
 				pieces = append(pieces, field.Value)
 			}
+		}
+		if embed.Footer != nil && embed.Footer.Text != "" {
+			pieces = append(pieces, embed.Footer.Text)
 		}
 		if len(pieces) > 0 {
 			parts = append(parts, strings.Join(pieces, "\n"))
@@ -377,9 +394,15 @@ func (s *Service) contextFromReply(session *discordgo.Session, message *discordg
 			seen[current.ID] = true
 		}
 		if current.Author != nil && current.Author.ID == session.State.User.ID {
+			s.replyMu.RLock()
+			cachedText := s.replies[current.ID]
+			s.replyMu.RUnlock()
+			if cachedText != "" {
+				return cachedText
+			}
 			text := messageTextForPrompt(current)
 			if text != "" {
-				return text
+				return s.addPreviousUserMessage(session, current, text)
 			}
 		}
 		if current.MessageReference != nil && current.MessageReference.MessageID != "" {
@@ -394,11 +417,31 @@ func (s *Service) contextFromReply(session *discordgo.Session, message *discordg
 	return ""
 }
 
+func (s *Service) addPreviousUserMessage(session *discordgo.Session, botMessage *discordgo.Message, botText string) string {
+	if session == nil || botMessage == nil {
+		return botText
+	}
+	previous, err := session.ChannelMessages(botMessage.ChannelID, 10, botMessage.ID, "", "")
+	if err != nil {
+		return botText
+	}
+	for _, candidate := range previous {
+		if candidate == nil || candidate.Author == nil || candidate.Author.Bot {
+			continue
+		}
+		text := messageTextForPrompt(candidate)
+		if text != "" {
+			return fmt.Sprintf("User request: %s\nHector response: %s", text, botText)
+		}
+	}
+	return botText
+}
+
 func (s *Service) referencedMessage(session *discordgo.Session, message *discordgo.MessageCreate) *discordgo.Message {
 	if message == nil {
 		return nil
 	}
-	if message.ReferencedMessage != nil {
+	if message.ReferencedMessage != nil && message.ReferencedMessage.Author != nil {
 		return message.ReferencedMessage
 	}
 	if session == nil || message.MessageReference == nil || message.MessageReference.MessageID == "" {
@@ -432,7 +475,7 @@ func referenceChannelID(message *discordgo.Message) string {
 	return ""
 }
 
-func (s *Service) rememberReply(session *discordgo.Session, channelID, content string) {
+func (s *Service) rememberReply(session *discordgo.Session, channelID, content, prompt, previousContext string) {
 	if session == nil || session.State == nil {
 		return
 	}
@@ -441,7 +484,14 @@ func (s *Service) rememberReply(session *discordgo.Session, channelID, content s
 		return
 	}
 	s.replyMu.Lock()
-	s.replies[sent.ID] = content
+	if s.replies == nil {
+		s.replies = make(map[string]string)
+	}
+	context := fmt.Sprintf("User request: %s\nHector response: %s", prompt, content)
+	if previousContext != "" {
+		context = previousContext + "\n" + context
+	}
+	s.replies[sent.ID] = context
 	s.replyMu.Unlock()
 }
 
