@@ -120,7 +120,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 	}
 
 	prompt, ok := extractPrompt(content, s.Prefix, session.State.User.ID)
-	if !ok && isReplyToBot(message, session.State.User.ID) {
+	if !ok && isReplyToBot(session, message, session.State.User.ID) {
 		prompt, ok = content, true
 	}
 	if !ok {
@@ -134,10 +134,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 
-	replyContext := ""
-	if message.ReferencedMessage != nil && message.ReferencedMessage.Author != nil && message.ReferencedMessage.Author.ID == session.State.User.ID {
-		replyContext = messageTextForPrompt(message.ReferencedMessage)
-	}
+	replyContext := contextFromReply(session, message)
 	s.reactToMessage(session, message, prompt)
 	response, err := s.generateResponse(message, prompt, replyContext)
 	if err != nil {
@@ -236,11 +233,12 @@ func extractSubcommand(content, prefix, botID, name string) (string, bool) {
 	return strings.TrimSpace(trimmed[len(keyword):]), true
 }
 
-func isReplyToBot(message *discordgo.MessageCreate, botID string) bool {
-	if message == nil || message.ReferencedMessage == nil || message.ReferencedMessage.Author == nil {
+func isReplyToBot(session *discordgo.Session, message *discordgo.MessageCreate, botID string) bool {
+	referenced := referencedMessage(session, message)
+	if referenced == nil || referenced.Author == nil {
 		return false
 	}
-	return message.ReferencedMessage.Author.ID == botID
+	return referenced.Author.ID == botID
 }
 
 func (s *Service) generateResponse(message *discordgo.MessageCreate, prompt, contextText string) (string, error) {
@@ -361,6 +359,54 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
+func contextFromReply(session *discordgo.Session, message *discordgo.MessageCreate) string {
+	if session == nil || message == nil {
+		return ""
+	}
+	seen := map[string]bool{}
+	current := referencedMessage(session, message)
+	for current != nil {
+		if current.ID != "" && seen[current.ID] {
+			break
+		}
+		if current.ID != "" {
+			seen[current.ID] = true
+		}
+		if current.Author != nil && current.Author.ID == session.State.User.ID {
+			text := messageTextForPrompt(current)
+			if text != "" {
+				return text
+			}
+		}
+		if current.MessageReference != nil && current.MessageReference.MessageID != "" {
+			ref, err := session.ChannelMessage(current.ChannelID, current.MessageReference.MessageID)
+			if err == nil {
+				current = ref
+				continue
+			}
+		}
+		break
+	}
+	return ""
+}
+
+func referencedMessage(session *discordgo.Session, message *discordgo.MessageCreate) *discordgo.Message {
+	if message == nil {
+		return nil
+	}
+	if message.ReferencedMessage != nil {
+		return message.ReferencedMessage
+	}
+	if session == nil || message.MessageReference == nil || message.MessageReference.MessageID == "" {
+		return nil
+	}
+	referenced, err := session.ChannelMessage(message.ChannelID, message.MessageReference.MessageID)
+	if err != nil {
+		return nil
+	}
+	return referenced
+}
+
 func parseContextCommand(content, prefix, botID string) (string, int, bool, error) {
 	trimmed := strings.TrimSpace(content)
 	lowerTrimmed := strings.ToLower(trimmed)
@@ -472,6 +518,7 @@ func extractNamePrompt(content, username string) (string, bool) {
 	words := strings.Fields(content)
 	for index, word := range words {
 		clean := strings.Trim(word, ".,!?;:()[]{}<>\"'`")
+		clean = strings.TrimPrefix(clean, "@")
 		if strings.EqualFold(clean, username) {
 			words = append(words[:index], words[index+1:]...)
 			return strings.TrimSpace(strings.Join(words, " ")), true

@@ -43,6 +43,10 @@ h hello
 @hector hello
 ```
 
+The mention form can appear anywhere in the message, including `@Hector hello`
+or `Can you ask @Hector about this?`. Discord's actual user mention format
+(`<@USER_ID>`) is also accepted at the start of a message.
+
 For a context-aware lookup, use the explicit context subcommand. It looks back through the last N messages in the active channel before answering:
 
 ```text
