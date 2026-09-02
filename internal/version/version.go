@@ -39,6 +39,20 @@ func Current() Info {
 		}
 	}
 
+	if info.Revision == "unknown" {
+		if output, err := exec.Command("git", "rev-parse", "HEAD").Output(); err == nil {
+			info.Revision = strings.TrimSpace(string(output))
+		}
+	}
+	if info.Time == "unknown" {
+		if output, err := exec.Command("git", "show", "-s", "--format=%cI", "HEAD").Output(); err == nil {
+			info.Time = strings.TrimSpace(string(output))
+		}
+	}
+	if output, err := exec.Command("git", "status", "--porcelain").Output(); err == nil {
+		info.Modified = strings.TrimSpace(string(output)) != ""
+	}
+
 	if output, err := exec.Command("git", "show", "-s", "--format=%s%n%b", "HEAD").Output(); err == nil {
 		lines := strings.SplitN(strings.TrimSpace(string(output)), "\n", 2)
 		if len(lines) > 0 && lines[0] != "" {

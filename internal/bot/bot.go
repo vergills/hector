@@ -124,6 +124,9 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		prompt, ok = content, true
 	}
 	if !ok {
+		prompt, ok = extractNamePrompt(content, session.State.User.Username)
+	}
+	if !ok {
 		return
 	}
 	if prompt == "" {
@@ -353,10 +356,27 @@ func extractPrompt(content, prefix, botID string) (string, bool) {
 			lowerTrimmed = strings.ToLower(trimmed)
 			break
 		}
+
 	}
 	if strings.HasPrefix(lowerTrimmed, strings.ToLower(prefix)) {
 		prompt := strings.TrimSpace(trimmed[len(prefix):])
 		return prompt, true
+	}
+	return "", false
+}
+
+func extractNamePrompt(content, username string) (string, bool) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return "", false
+	}
+	words := strings.Fields(content)
+	for index, word := range words {
+		clean := strings.Trim(word, ".,!?;:()[]{}<>\"'`")
+		if strings.EqualFold(clean, username) {
+			words = append(words[:index], words[index+1:]...)
+			return strings.TrimSpace(strings.Join(words, " ")), true
+		}
 	}
 	return "", false
 }
