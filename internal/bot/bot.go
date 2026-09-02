@@ -411,7 +411,7 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 	}
 	parts := make([]string, 0, 4)
 	if text := strings.TrimSpace(msg.Content); text != "" {
-		parts = append(parts, text)
+		parts = append(parts, replaceDiscordMentions(text, msg.Mentions))
 	}
 	for _, embed := range msg.Embeds {
 		if embed == nil {
@@ -429,7 +429,7 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 		}
 		if embed.Author != nil {
 			if embed.Author.Name != "" {
-				pieces = append(pieces, embed.Author.Name)
+				pieces = append(pieces, "embed author: "+embed.Author.Name)
 			}
 			if embed.Author.URL != "" {
 				pieces = append(pieces, embed.Author.URL)
@@ -447,10 +447,28 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 			pieces = append(pieces, embed.Footer.Text)
 		}
 		if len(pieces) > 0 {
-			parts = append(parts, strings.Join(pieces, "\n"))
+			parts = append(parts, replaceDiscordMentions(strings.Join(pieces, "\n"), msg.Mentions))
 		}
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func replaceDiscordMentions(text string, mentions []*discordgo.User) string {
+	for _, user := range mentions {
+		if user == nil || user.ID == "" {
+			continue
+		}
+		name := user.GlobalName
+		if name == "" {
+			name = user.Username
+		}
+		if name == "" {
+			continue
+		}
+		text = strings.ReplaceAll(text, "<@"+user.ID+">", "@"+name)
+		text = strings.ReplaceAll(text, "<@!"+user.ID+">", "@"+name)
+	}
+	return text
 }
 
 func (s *Service) contextFromReply(session *discordgo.Session, message *discordgo.MessageCreate) string {

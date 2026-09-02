@@ -3,6 +3,8 @@ package bot
 import (
 	"strings"
 	"testing"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func TestExtractPromptFromDiscordMention(t *testing.T) {
@@ -26,6 +28,17 @@ func TestExtractPromptFromDiscordMention(t *testing.T) {
 				t.Fatalf("prompt = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestReplaceDiscordMentionsUsesDisplayNames(t *testing.T) {
+	got := replaceDiscordMentions("hello <@123> and <@!456>", []*discordgo.User{
+		{ID: "123", Username: "bridge", GlobalName: "Bridge Person"},
+		{ID: "456", Username: "another-user"},
+	})
+	want := "hello @Bridge Person and @another-user"
+	if got != want {
+		t.Fatalf("mentions = %q, want %q", got, want)
 	}
 }
 
