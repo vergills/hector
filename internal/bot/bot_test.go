@@ -31,6 +31,16 @@ func TestExtractPromptFromDiscordMention(t *testing.T) {
 	}
 }
 
+func TestExtractPromptRequiresPrefixWhitespace(t *testing.T) {
+	if prompt, ok := extractPrompt("hello there", "h", "123"); ok || prompt != "" {
+		t.Fatalf("unexpected prefix match: %q, %v", prompt, ok)
+	}
+	prompt, ok := extractPrompt("h hello there", "h", "123")
+	if !ok || prompt != "hello there" {
+		t.Fatalf("prompt = %q, ok = %v", prompt, ok)
+	}
+}
+
 func TestReplaceDiscordMentionsUsesDisplayNames(t *testing.T) {
 	got := replaceDiscordMentions("hello <@123> and <@!456>", []*discordgo.User{
 		{ID: "123", Username: "bridge", GlobalName: "Bridge Person"},

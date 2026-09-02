@@ -803,7 +803,7 @@ func startsWithCommandPrefix(content, prefix string) bool {
 		return false
 	}
 	next := lower[len(prefix)]
-	if (next >= 'a' && next <= 'z') || (next >= '0' && next <= '9') || next == '_' {
+	if next != ' ' && next != '\t' {
 		return false
 	}
 	return true
