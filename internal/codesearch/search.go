@@ -52,11 +52,25 @@ func (s *Searcher) Search(query string) (string, error) {
 			return "", ErrNoMatches
 		}
 		if message := strings.TrimSpace(string(output)); message != "" {
-			return "", errors.New(message)
+			return "", errors.New(uniqueLines(message))
 		}
 		return "", fmt.Errorf("grep: %w", err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func uniqueLines(message string) string {
+	lines := strings.Split(message, "\n")
+	seen := make(map[string]struct{}, len(lines))
+	unique := lines[:0]
+	for _, line := range lines {
+		if _, ok := seen[line]; ok {
+			continue
+		}
+		seen[line] = struct{}{}
+		unique = append(unique, line)
+	}
+	return strings.Join(unique, "\n")
 }
 
 func shellFields(input string) ([]string, error) {

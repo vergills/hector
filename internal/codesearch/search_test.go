@@ -53,3 +53,10 @@ func TestSearchIncludesGrepErrorOutput(t *testing.T) {
 		t.Fatalf("error = %q, want grep stderr", got)
 	}
 }
+
+func TestUniqueLinesRemovesDuplicateDiagnostics(t *testing.T) {
+	got := uniqueLines("grep: .: Is a directory\ngrep: .: Is a directory")
+	if got != "grep: .: Is a directory" {
+		t.Fatalf("message = %q", got)
+	}
+}
