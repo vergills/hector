@@ -171,6 +171,24 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 	if prompt == "" {
+		if message.MessageReference == nil {
+			contextText, err := s.readRecentContext(session, message, 5)
+			if err != nil {
+				s.logError("fallback context lookup failed", err, "message_id", message.ID, "channel_id", message.ChannelID)
+				s.sendMessage(session, message.ChannelID, "I hit a problem loading recent context: "+err.Error())
+				return
+			}
+			response, err := s.generateResponse(message, "Respond to the recent conversation.", contextText)
+			if err != nil {
+				s.sendMessage(session, message.ChannelID, "I hit a problem: "+err.Error())
+				return
+			}
+			for _, block := range splitDiscordMessage(response) {
+				s.rememberReply(session, message.ChannelID, block, "Respond to the recent conversation.", contextText)
+				time.Sleep(200 * time.Millisecond)
+			}
+			return
+		}
 		s.sendMessage(session, message.ChannelID, s.HelpText)
 		return
 	}
@@ -685,6 +703,9 @@ func startsWithCommandPrefix(content, prefix string) bool {
 
 func extractPrompt(content, prefix, botID string) (string, bool) {
 	trimmed := strings.TrimSpace(content)
+	if withoutMention, found := removeBotMention(trimmed, botID); found {
+		return withoutMention, true
+	}
 	lowerTrimmed := strings.ToLower(trimmed)
 	for _, candidate := range []string{"<@" + botID + ">", "<@!" + botID + ">"} {
 		if strings.HasPrefix(lowerTrimmed, strings.ToLower(candidate)) {
@@ -698,6 +719,25 @@ func extractPrompt(content, prefix, botID string) (string, bool) {
 		return prompt, true
 	}
 	return "", false
+}
+
+func removeBotMention(content, botID string) (string, bool) {
+	if strings.TrimSpace(botID) == "" {
+		return content, false
+	}
+	mentions := map[string]struct{}{
+		"<@" + botID + ">":  {},
+		"<@!" + botID + ">": {},
+	}
+	words := strings.Fields(content)
+	for index, word := range words {
+		if _, ok := mentions[word]; !ok {
+			continue
+		}
+		words = append(words[:index], words[index+1:]...)
+		return strings.TrimSpace(strings.Join(words, " ")), true
+	}
+	return content, false
 }
 
 func extractNamePrompt(content, username string) (string, bool) {
