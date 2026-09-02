@@ -49,7 +49,7 @@ func TestSearchIncludesGrepErrorOutput(t *testing.T) {
 	if err == nil {
 		t.Fatal("Search returned nil error")
 	}
-	if got := err.Error(); got != "grep: grep: missing-file: No such file or directory" {
+	if got := err.Error(); got != "grep: missing-file: No such file or directory" {
 		t.Fatalf("error = %q, want grep stderr", got)
 	}
 }

@@ -52,7 +52,7 @@ func (s *Searcher) Search(query string) (string, error) {
 			return "", ErrNoMatches
 		}
 		if message := strings.TrimSpace(string(output)); message != "" {
-			return "", fmt.Errorf("grep: %s", message)
+			return "", errors.New(message)
 		}
 		return "", fmt.Errorf("grep: %w", err)
 	}
