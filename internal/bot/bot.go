@@ -347,6 +347,27 @@ func trimResponse(text string, max int) string {
 	return strings.TrimRight(trimmed, " \n\t") + "..."
 }
 
+func startsWithCommandPrefix(content, prefix string) bool {
+	if prefix == "" {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(content))
+	if lower == strings.ToLower(prefix) {
+		return true
+	}
+	if len(lower) <= len(prefix) {
+		return false
+	}
+	if !strings.HasPrefix(lower, strings.ToLower(prefix)) {
+		return false
+	}
+	next := lower[len(prefix)]
+	if (next >= 'a' && next <= 'z') || (next >= '0' && next <= '9') || next == '_' {
+		return false
+	}
+	return true
+}
+
 func extractPrompt(content, prefix, botID string) (string, bool) {
 	trimmed := strings.TrimSpace(content)
 	lowerTrimmed := strings.ToLower(trimmed)
@@ -356,9 +377,8 @@ func extractPrompt(content, prefix, botID string) (string, bool) {
 			lowerTrimmed = strings.ToLower(trimmed)
 			break
 		}
-
 	}
-	if strings.HasPrefix(lowerTrimmed, strings.ToLower(prefix)) {
+	if startsWithCommandPrefix(trimmed, prefix) {
 		prompt := strings.TrimSpace(trimmed[len(prefix):])
 		return prompt, true
 	}
