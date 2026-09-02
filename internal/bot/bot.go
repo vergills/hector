@@ -168,8 +168,8 @@ func (s *Service) handleVersion(session *discordgo.Session, message *discordgo.M
 		state = "modified source"
 	}
 	_, _ = session.ChannelMessageSend(message.ChannelID,
-		fmt.Sprintf("running commit `%s` (%s)\nheader: %s\ndescription: %s\nbuilt: `%s`\ngo: `%s`",
-			revision, state, info.Subject, info.Body, info.Time, info.GoVersion))
+		fmt.Sprintf("running commit `%s` (%s)\nheader: %s\ndescription: %s\ntimestamp: `%s`\ngo: `%s`\nrepository: %s",
+			revision, state, info.Subject, info.Body, info.Time, info.GoVersion, version.RepositoryURL))
 }
 
 func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordgo.MessageCreate, question string) {

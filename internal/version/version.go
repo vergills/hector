@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const RepositoryURL = "https://github.com/vergills/hector"
+
 type Info struct {
 	Revision  string
 	Modified  bool
