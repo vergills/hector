@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/vergills/hector/internal/bot"
+	"github.com/vergills/hector/internal/codesearch"
 	"github.com/vergills/hector/internal/config"
 	"github.com/vergills/hector/internal/gemini"
 )
@@ -21,7 +22,11 @@ func main() {
 	}
 
 	client := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.SystemPrompt, cfg.MaxResponseChars, cfg.MaxOutputTokens)
-	svc := bot.New(client, cfg.BotPrefix, cfg.MaxContextMessages, cfg.HelpText, cfg.MaxResponseChars)
+	codeSearcher, err := codesearch.New(".")
+	if err != nil {
+		log.Fatal(err)
+	}
+	svc := bot.New(client, cfg.BotPrefix, cfg.MaxContextMessages, cfg.HelpText, cfg.MaxResponseChars, codeSearcher)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

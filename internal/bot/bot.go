@@ -9,8 +9,13 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/vergills/hector/internal/codesearch"
 	"github.com/vergills/hector/internal/gemini"
 )
+
+type CodeSearcher interface {
+	Search(pattern string) (string, error)
+}
 
 type Service struct {
 	Client             *gemini.Client
@@ -19,9 +24,10 @@ type Service struct {
 	MaxContextMessages int
 	HelpText           string
 	MaxResponseChars   int
+	CodeSearcher       CodeSearcher
 }
 
-func New(client *gemini.Client, prefix string, maxContextMessages int, helpText string, maxResponseChars int) *Service {
+func New(client *gemini.Client, prefix string, maxContextMessages int, helpText string, maxResponseChars int, codeSearcher CodeSearcher) *Service {
 	if prefix == "" {
 		prefix = "h"
 	}
@@ -41,6 +47,7 @@ func New(client *gemini.Client, prefix string, maxContextMessages int, helpText 
 		MaxContextMessages: maxContextMessages,
 		HelpText:           helpText,
 		MaxResponseChars:   maxResponseChars,
+		CodeSearcher:       codeSearcher,
 	}
 }
 
@@ -72,6 +79,12 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 
 	content := strings.TrimSpace(message.Content)
 	if content == "" {
+		return
+	}
+
+	codeQuery, okCode := extractSubcommand(content, s.Prefix, session.State.User.ID, "code")
+	if okCode {
+		s.handleCodeSearch(session, message, codeQuery)
 		return
 	}
 
@@ -121,6 +134,77 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		_, _ = session.ChannelMessageSend(message.ChannelID, block)
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordgo.MessageCreate, question string) {
+	if strings.TrimSpace(question) == "" {
+		_, _ = session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Usage: `%s code <what to search for>`", s.Prefix))
+		return
+	}
+
+	prompt := "Return only one safe grep -E regular expression for searching this Go repository. " +
+		"Do not use shell syntax, flags, paths, backticks, or newlines. Search terms should be concise and match source identifiers or concepts. " +
+		"User request: " + question
+	pattern, err := s.Client.Generate(context.Background(), prompt)
+	if err != nil {
+		_, _ = session.ChannelMessageSend(message.ChannelID, "I hit a problem generating the code search: "+err.Error())
+		return
+	}
+	pattern = strings.TrimSpace(strings.Trim(pattern, "`"))
+	if s.CodeSearcher == nil {
+		_, _ = session.ChannelMessageSend(message.ChannelID, "Code search is not configured.")
+		return
+	}
+	output, err := s.CodeSearcher.Search(pattern)
+	if err != nil {
+		if errors.Is(err, codesearch.ErrNoMatches) {
+			_, _ = session.ChannelMessageSend(message.ChannelID, "No matching source lines found.")
+			return
+		}
+		_, _ = session.ChannelMessageSend(message.ChannelID, "Code search failed: "+err.Error())
+		return
+	}
+	for _, block := range splitCodeSearchOutput(output) {
+		_, _ = session.ChannelMessageSend(message.ChannelID, block)
+	}
+}
+
+func splitCodeSearchOutput(output string) []string {
+	const maxCodeBlock = 1900
+	lines := strings.Split(output, "\n")
+	blocks := make([]string, 0)
+	current := ""
+	for _, line := range lines {
+		if len(current)+len(line)+1 > maxCodeBlock && current != "" {
+			blocks = append(blocks, "```text\n"+current+"\n```")
+			current = ""
+		}
+		if current != "" {
+			current += "\n"
+		}
+		current += line
+	}
+	if current != "" {
+		blocks = append(blocks, "```text\n"+current+"\n```")
+	}
+	return blocks
+}
+
+func extractSubcommand(content, prefix, botID, name string) (string, bool) {
+	trimmed := strings.TrimSpace(content)
+	lower := strings.ToLower(trimmed)
+	for _, mention := range []string{"<@" + botID + ">", "<@!" + botID + ">"} {
+		if strings.HasPrefix(lower, strings.ToLower(mention)) {
+			trimmed = strings.TrimSpace(trimmed[len(mention):])
+			lower = strings.ToLower(trimmed)
+			break
+		}
+	}
+	keyword := strings.ToLower(prefix + " " + name)
+	if !strings.HasPrefix(lower, keyword) {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed[len(keyword):]), true
 }
 
 func isReplyToBot(message *discordgo.MessageCreate, botID string) bool {

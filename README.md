@@ -53,3 +53,11 @@ h ctx 5 summarize what we discussed
 If you do not use `ctx`, the bot responds using the current message only, with no automatic background history lookup. This keeps normal responses fast while still allowing deeper lookups when needed.
 
 The bot also trims output to the configured `MAX_RESPONSE_CHARS` value so it does not burn through token budget.
+
+For source-code lookup, use:
+
+```text
+h code how does reply handling work?
+```
+
+Gemini is used only to produce a safe `grep -E` search pattern. The bot runs the local search itself and returns the matching source lines in code fences; grep output is never sent back to Gemini.
