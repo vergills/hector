@@ -7,9 +7,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
+
+type RateLimitError struct {
+	RetryAfter time.Duration
+	Daily      bool
+	Message    string
+}
+
+func (e *RateLimitError) Error() string {
+	if e.Daily {
+		return "Gemini daily quota has been exhausted; try again after the quota resets"
+	}
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("Gemini is rate-limiting requests; retry in %s", e.RetryAfter.Round(time.Second))
+	}
+	return "Gemini is temporarily rate-limiting requests; try again shortly"
+}
 
 type Client struct {
 	APIKey           string
@@ -107,6 +124,14 @@ func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		if resp.StatusCode == http.StatusTooManyRequests {
+			message := strings.TrimSpace(string(data))
+			return "", &RateLimitError{
+				RetryAfter: retryAfter(resp.Header.Get("Retry-After")),
+				Daily:      strings.Contains(message, "PerDay") || strings.Contains(message, "per day"),
+				Message:    message,
+			}
+		}
 		return "", fmt.Errorf("gemini API error: %s", strings.TrimSpace(string(data)))
 	}
 
@@ -134,4 +159,15 @@ func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
 		return "", fmt.Errorf("gemini response text was empty")
 	}
 	return text, nil
+}
+
+func retryAfter(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+	seconds, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || seconds < 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }

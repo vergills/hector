@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -133,6 +134,16 @@ func (s *Service) generateResponse(message *discordgo.MessageCreate, prompt, con
 	finalPrompt := buildPrompt(contextText, message.Author.Username, prompt, s.MaxResponseChars)
 	response, err := s.Client.Generate(context.Background(), finalPrompt)
 	if err != nil {
+		var rateLimitErr *gemini.RateLimitError
+		if errors.As(err, &rateLimitErr) {
+			if rateLimitErr.Daily {
+				return "", fmt.Errorf("the Gemini daily quota is exhausted; please try again after the quota resets")
+			}
+			if rateLimitErr.RetryAfter > 0 {
+				return "", fmt.Errorf("Gemini is rate-limiting requests; please retry in %s", rateLimitErr.RetryAfter.Round(time.Second))
+			}
+			return "", fmt.Errorf("Gemini is temporarily rate-limiting requests; please try again shortly")
+		}
 		return "", err
 	}
 	return trimResponse(response, s.MaxResponseChars), nil
