@@ -35,7 +35,6 @@ The app reads the following values from `.env` or the shell environment:
 - `HELP_TEXT` – text shown when the user sends a blank prompt
 - `MAX_RESPONSE_CHARS` – max output length, default `140`
 - `MAX_OUTPUT_TOKENS` – Gemini output-token ceiling, default `512`; optional thinking is disabled to preserve room for the visible response
-- `CODE_SEARCH_MAX_BYTES` – maximum CodeSearch output size, default `50000`
 - `CODE_SEARCH_TIMEOUT_SECONDS` – CodeSearch timeout, default `5`
 
 ## Usage
@@ -76,7 +75,7 @@ For source-code lookup, everything after `grep` is passed directly to `grep`:
 h grep -Fi "replyContext" -d recurse
 ```
 
-CodeSearch adds the repository path, enforces the configured timeout and output limit, and does not call Gemini. Shell quoting is supported, but shell commands are not executed.
+CodeSearch adds the repository path and `.env` exclusion, enforces the configured timeout, and does not cap output. Shell quoting is supported, but shell commands are not executed.
 
 To see the commit the running process was built from, use:
 

@@ -13,23 +13,19 @@ import (
 var ErrNoMatches = errors.New("no code matches")
 
 type Searcher struct {
-	Root          string
-	MaxOutputSize int
-	Timeout       time.Duration
+	Root    string
+	Timeout time.Duration
 }
 
-func New(root string, maxOutputSize int, timeout time.Duration) (*Searcher, error) {
+func New(root string, timeout time.Duration) (*Searcher, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository path: %w", err)
 	}
-	if maxOutputSize <= 0 {
-		maxOutputSize = 50000
-	}
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &Searcher{Root: root, MaxOutputSize: maxOutputSize, Timeout: timeout}, nil
+	return &Searcher{Root: root, Timeout: timeout}, nil
 }
 
 func (s *Searcher) Search(query string) (string, error) {
@@ -56,9 +52,6 @@ func (s *Searcher) Search(query string) (string, error) {
 			return "", ErrNoMatches
 		}
 		return "", fmt.Errorf("grep: %w", err)
-	}
-	if len(output) > s.MaxOutputSize {
-		output = output[:s.MaxOutputSize]
 	}
 	return strings.TrimSpace(string(output)), nil
 }

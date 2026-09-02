@@ -27,7 +27,7 @@ func TestSearchExcludesEnvFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "source.go"), []byte("SECRET_MARKER\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	searcher, err := New(root, 50000, time.Second)
+	searcher, err := New(root, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
