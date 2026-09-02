@@ -761,7 +761,7 @@ func buildPrompt(contextText, username, userID, botName, prompt string, maxRespo
 		"Do not restate the question, announce what you are doing, add generic disclaimers, or use headings and listicles unless the user asks for them. " +
 		"Match the users tone and answer the actual point immediately. Be concise and let the response be imperfect and conversational rather than polished. " +
 		"Keep responses extremely short, clear, and useful. Prefer one short line and never more than two brief sentences. " +
-		"When mentioning a Discord user, always use Discord mention syntax like <@123456789>, never @username."
+		"Only mention a Discord user when it is relevant or explicitly requested. If you do mention one, use Discord syntax like <@123456789>, never @username."
 	if contextText != "" {
 		base += "\nRecent channel context:\n" + contextText + "\n"
 	}
@@ -773,6 +773,14 @@ func buildPrompt(contextText, username, userID, botName, prompt string, maxRespo
 
 func trimResponse(text string, max int) string {
 	text = strings.TrimSpace(text)
+	for {
+		cleaned := strings.TrimSpace(strings.TrimSuffix(text, "</p>"))
+		cleaned = strings.TrimSpace(strings.TrimPrefix(cleaned, "<p>"))
+		if cleaned == text {
+			break
+		}
+		text = cleaned
+	}
 	if max <= 0 || len(text) <= max {
 		return text
 	}

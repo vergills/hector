@@ -64,9 +64,18 @@ func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
 		"do not use punctuation",
 		"not a customer support agent",
 		"Do not restate the question",
+		"Only mention a Discord user when it is relevant",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt does not contain identity instruction %q", want)
 		}
+	}
+
+}
+
+func TestTrimResponseRemovesParagraphTags(t *testing.T) {
+	got := trimResponse("<p>hello there</p>", 140)
+	if got != "hello there" {
+		t.Fatalf("response = %q, want %q", got, "hello there")
 	}
 }
