@@ -79,6 +79,9 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 	}
 
 	content := strings.TrimSpace(message.Content)
+	if content == "" && len(message.Embeds) > 0 {
+		content = messageTextForPrompt(message.Message)
+	}
 	if content == "" {
 		return
 	}
@@ -134,8 +137,12 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 
+	replyContext := ""
+	if message.ReferencedMessage != nil && message.ReferencedMessage.Author != nil && message.ReferencedMessage.Author.ID == session.State.User.ID {
+		replyContext = messageTextForPrompt(message.ReferencedMessage)
+	}
 	s.reactToMessage(session, message, prompt)
-	response, err := s.generateResponse(message, prompt, "")
+	response, err := s.generateResponse(message, prompt, replyContext)
 	if err != nil {
 		_, _ = session.ChannelMessageSend(message.ChannelID, "I hit a problem: "+err.Error())
 		return
@@ -296,12 +303,53 @@ func (s *Service) readRecentContext(session *discordgo.Session, message *discord
 		if item.ID == message.ID {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("<@%s> (%s): %s", item.Author.ID, item.Author.Username, strings.TrimSpace(item.Content)))
+		text := messageTextForPrompt(item)
+		if text == "" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("<@%s> (%s): %s", item.Author.ID, item.Author.Username, text))
 	}
 	if len(parts) == 0 {
 		return "", nil
 	}
 	return strings.Join(parts, "\n"), nil
+}
+
+func messageTextForPrompt(msg *discordgo.Message) string {
+	if msg == nil {
+		return ""
+	}
+	parts := make([]string, 0, 4)
+	if text := strings.TrimSpace(msg.Content); text != "" {
+		parts = append(parts, text)
+	}
+	for _, embed := range msg.Embeds {
+		if embed == nil {
+			continue
+		}
+		pieces := make([]string, 0, 8)
+		if embed.Title != "" {
+			pieces = append(pieces, embed.Title)
+		}
+		if embed.Description != "" {
+			pieces = append(pieces, embed.Description)
+		}
+		if embed.URL != "" {
+			pieces = append(pieces, embed.URL)
+		}
+		for _, field := range embed.Fields {
+			if field.Name != "" {
+				pieces = append(pieces, field.Name)
+			}
+			if field.Value != "" {
+				pieces = append(pieces, field.Value)
+			}
+		}
+		if len(pieces) > 0 {
+			parts = append(parts, strings.Join(pieces, "\n"))
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 func parseContextCommand(content, prefix, botID string) (string, int, bool, error) {
