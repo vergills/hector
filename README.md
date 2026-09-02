@@ -7,15 +7,14 @@ Throw-away Discord bot, vibe-coded over-night by yours truly on a freakin’ iPa
 - `internal/config` – environment config loading
 - `internal/bot` – Discord command handling, context lookups, and prompt assembly
 - `internal/gemini` – Gemini API client
-- `.env.example` – template for required environment variables
+- `/root/.config/hector.env` – runtime environment file loaded by the systemd service
 
 ## Setup
 
-1. Copy `.env.example` to `.env`
-2. Fill in your Discord bot token and Gemini API key
-3. In the Discord Developer Portal, enable the **Message Content Intent** for the bot
-4. Adjust the optional config values if needed
-5. Run:
+1. Create `/root/.config/hector.env` with your Discord bot token and Gemini API key
+2. In the Discord Developer Portal, enable the **Message Content Intent** for the bot
+3. Adjust the optional config values if needed
+4. Run:
 
 ```bash
 go run ./cmd/hector
