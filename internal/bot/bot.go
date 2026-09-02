@@ -128,7 +128,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 
-	codeQuery, okCode := extractSubcommand(content, s.Prefix, session.State.User.ID, "code")
+	codeQuery, okCode := extractSubcommand(content, s.Prefix, session.State.User.ID, "grep")
 	if okCode {
 		s.handleCodeSearch(session, message, codeQuery)
 		return
@@ -239,7 +239,7 @@ func (s *Service) handleVersion(session *discordgo.Session, message *discordgo.M
 
 func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordgo.MessageCreate, question string) {
 	if strings.TrimSpace(question) == "" {
-		s.sendMessage(session, message.ChannelID, fmt.Sprintf("Usage: `%s code <what to search for>`", s.Prefix))
+		s.sendMessage(session, message.ChannelID, fmt.Sprintf("Usage: `%s grep <grep arguments>`", s.Prefix))
 		return
 	}
 

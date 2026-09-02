@@ -70,10 +70,10 @@ Discord user mentions must use the platform's ID-based format:
 
 The bot supplies user IDs to Gemini and instructs it not to emit plain `@username` mentions.
 
-For source-code lookup, everything after `code` is passed directly to `grep`:
+For source-code lookup, everything after `grep` is passed directly to `grep`:
 
 ```text
-h code -Fi "replyContext" -d recurse
+h grep -Fi "replyContext" -d recurse
 ```
 
 CodeSearch adds the repository path, enforces the configured timeout and output limit, and does not call Gemini. Shell quoting is supported, but shell commands are not executed.
