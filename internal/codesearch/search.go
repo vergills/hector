@@ -42,6 +42,7 @@ func (s *Searcher) Search(query string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.Timeout)
 	defer cancel()
+	args = append([]string{"--exclude=.env"}, args...)
 	args = append(args, ".")
 	cmd := exec.CommandContext(ctx, "grep", args...)
 	cmd.Dir = s.Root
