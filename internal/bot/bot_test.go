@@ -41,6 +41,13 @@ func TestExtractPromptRequiresPrefixWhitespace(t *testing.T) {
 	}
 }
 
+func TestExtractNamePromptMatchesSubstrings(t *testing.T) {
+	prompt, ok := extractNamePrompt("this is hector's problem", "Hector")
+	if !ok || prompt != "this is problem" {
+		t.Fatalf("prompt = %q, ok = %v", prompt, ok)
+	}
+}
+
 func TestReplaceDiscordMentionsUsesDisplayNames(t *testing.T) {
 	got := replaceDiscordMentions("hello <@123> and <@!456>", []*discordgo.User{
 		{ID: "123", Username: "bridge", GlobalName: "Bridge Person"},

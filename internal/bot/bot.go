@@ -853,14 +853,15 @@ func extractNamePrompt(content, username string) (string, bool) {
 	if username == "" {
 		return "", false
 	}
-	words := strings.Fields(content)
-	for index, word := range words {
-		clean := strings.Trim(word, ".,!?;:()[]{}<>\"'`")
-		clean = strings.TrimPrefix(clean, "@")
-		if strings.EqualFold(clean, username) {
-			words = append(words[:index], words[index+1:]...)
-			return strings.TrimSpace(strings.Join(words, " ")), true
+	lowerContent := strings.ToLower(content)
+	lowerUsername := strings.ToLower(username)
+	index := strings.Index(lowerContent, lowerUsername)
+	if index >= 0 {
+		end := index + len(username)
+		if len(content) >= end+2 && content[end:end+2] == "'s" {
+			end += 2
 		}
+		return strings.Join(strings.Fields(content[:index]+content[end:]), " "), true
 	}
 	return "", false
 }
