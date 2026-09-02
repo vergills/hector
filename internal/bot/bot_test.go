@@ -40,6 +40,17 @@ func TestReplaceDiscordMentionsUsesDisplayNames(t *testing.T) {
 	if got != want {
 		t.Fatalf("mentions = %q, want %q", got, want)
 	}
+
+}
+
+func TestNormalizeSearchPattern(t *testing.T) {
+	got, err := normalizeSearchPattern("```regex\nreplyContext\n```")
+	if err != nil {
+		t.Fatalf("normalizeSearchPattern returned error: %v", err)
+	}
+	if got != "replyContext" {
+		t.Fatalf("pattern = %q, want %q", got, "replyContext")
+	}
 }
 
 func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
