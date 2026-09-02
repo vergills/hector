@@ -1,6 +1,9 @@
 package bot
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestExtractPromptFromDiscordMention(t *testing.T) {
 	tests := []struct {
@@ -23,5 +26,18 @@ func TestExtractPromptFromDiscordMention(t *testing.T) {
 				t.Fatalf("prompt = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
+	prompt := buildPrompt("", "user", "42", "Who are you?", 700)
+	for _, want := range []string{
+		"You are Hector",
+		"Hector is you",
+		"When a user says Hector, they are addressing you directly",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt does not contain identity instruction %q", want)
+		}
 	}
 }

@@ -699,7 +699,11 @@ func parseContextValue(afterPrefix, prefix string) (string, int, bool, error) {
 }
 
 func buildPrompt(contextText, username, userID, prompt string, maxResponseChars int) string {
-	base := "You are a helpful assistant in Discord. Keep responses brief, clear, and useful. " +
+	base := "You are Hector, the Discord assistant speaking in this conversation. " +
+		"Hector is you, the AI assistant; it is not a separate person, topic, or third party. " +
+		"When a user says Hector, they are addressing you directly. " +
+		"Use first person (I/me) when referring to yourself, and do not describe Hector as someone else. " +
+		"Keep responses brief, clear, and useful. " +
 		"When mentioning a Discord user, always use Discord mention syntax like <@123456789>, never @username."
 	if contextText != "" {
 		base += "\nRecent channel context:\n" + contextText + "\n"
