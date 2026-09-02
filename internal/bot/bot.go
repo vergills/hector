@@ -215,7 +215,7 @@ func isReplyToBot(message *discordgo.MessageCreate, botID string) bool {
 }
 
 func (s *Service) generateResponse(message *discordgo.MessageCreate, prompt, contextText string) (string, error) {
-	finalPrompt := buildPrompt(contextText, message.Author.Username, prompt, s.MaxResponseChars)
+	finalPrompt := buildPrompt(contextText, message.Author.Username, message.Author.ID, prompt, s.MaxResponseChars)
 	response, err := s.Client.Generate(context.Background(), finalPrompt)
 	if err != nil {
 		var rateLimitErr *gemini.RateLimitError
@@ -250,7 +250,7 @@ func (s *Service) readRecentContext(session *discordgo.Session, message *discord
 		if item.ID == message.ID {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%s: %s", item.Author.Username, strings.TrimSpace(item.Content)))
+		parts = append(parts, fmt.Sprintf("<@%s> (%s): %s", item.Author.ID, item.Author.Username, strings.TrimSpace(item.Content)))
 	}
 	if len(parts) == 0 {
 		return "", nil
@@ -302,15 +302,16 @@ func parseContextValue(afterPrefix, prefix string) (string, int, bool, error) {
 	return strings.Join(parts, " "), count, true, nil
 }
 
-func buildPrompt(contextText, username, prompt string, maxResponseChars int) string {
-	base := "You are a helpful assistant in Discord. Keep responses brief, clear, and useful."
+func buildPrompt(contextText, username, userID, prompt string, maxResponseChars int) string {
+	base := "You are a helpful assistant in Discord. Keep responses brief, clear, and useful. " +
+		"When mentioning a Discord user, always use Discord mention syntax like <@123456789>, never @username."
 	if contextText != "" {
 		base += "\nRecent channel context:\n" + contextText + "\n"
 	}
 	if maxResponseChars > 0 {
 		base += "\nRespond in at most " + strconv.Itoa(maxResponseChars) + " characters."
 	}
-	return base + "\nCurrent user: " + username + "\nCurrent request: " + prompt
+	return base + "\nCurrent user: " + username + " (ID: " + userID + ")\nCurrent request: " + prompt
 }
 
 func trimResponse(text string, max int) string {

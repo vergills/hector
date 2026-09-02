@@ -54,6 +54,14 @@ If you do not use `ctx`, the bot responds using the current message only, with n
 
 The bot also trims output to the configured `MAX_RESPONSE_CHARS` value so it does not burn through token budget.
 
+Discord user mentions must use the platform's ID-based format:
+
+```text
+<@USER_ID>
+```
+
+The bot supplies user IDs to Gemini and instructs it not to emit plain `@username` mentions.
+
 For source-code lookup, use:
 
 ```text
