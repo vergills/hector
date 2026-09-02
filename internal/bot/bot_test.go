@@ -33,8 +33,8 @@ func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
 	prompt := buildPrompt("", "user", "42", "Hector", "Who are you?", 400)
 	for _, want := range []string{
 		"You are Hector",
-		"Hector is you",
-		"When a user says Hector, they are addressing you directly",
+		"when a user says Hector, they are addressing you directly",
+		"the first person",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt does not contain identity instruction %q", want)
