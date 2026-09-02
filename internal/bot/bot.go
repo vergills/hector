@@ -95,7 +95,16 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		"has_reference", message.MessageReference != nil,
 		"has_referenced_message", message.ReferencedMessage != nil,
 	)
-	if message.Author == nil || message.Author.Bot {
+	if message.Author == nil {
+		s.logInfo("message ignored without author", "message_id", message.ID)
+		return
+	}
+	if session.State == nil || session.State.User == nil {
+		s.logError("message ignored without current bot identity", nil, "message_id", message.ID)
+		return
+	}
+	if message.Author.ID == session.State.User.ID {
+		s.logInfo("own message ignored", "message_id", message.ID)
 		return
 	}
 
@@ -441,6 +450,15 @@ func (s *Service) contextFromReply(session *discordgo.Session, message *discordg
 				s.logInfo("reply context loaded from Discord", "message_id", message.ID, "reference_id", current.ID, "context_chars", len(context))
 				return context
 			}
+		}
+		if text := messageTextForPrompt(current); text != "" {
+			author := "unknown author"
+			if current.Author != nil && current.Author.Username != "" {
+				author = current.Author.Username
+			}
+			context := fmt.Sprintf("Referenced message from %s: %s", author, text)
+			s.logInfo("reply context loaded from referenced message", "message_id", message.ID, "reference_id", current.ID, "context_chars", len(context))
+			return context
 		}
 		if current.MessageReference != nil && current.MessageReference.MessageID != "" {
 			ref, err := session.ChannelMessage(referenceChannelID(current), current.MessageReference.MessageID)
