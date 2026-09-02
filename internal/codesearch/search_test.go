@@ -39,3 +39,17 @@ func TestSearchExcludesEnvFile(t *testing.T) {
 		t.Fatalf("output = %q, want only source.go match", output)
 	}
 }
+
+func TestSearchIncludesGrepErrorOutput(t *testing.T) {
+	searcher, err := New(t.TempDir(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = searcher.Search("-r -n SECRET_MARKER missing-file")
+	if err == nil {
+		t.Fatal("Search returned nil error")
+	}
+	if got := err.Error(); got != "grep: grep: missing-file: No such file or directory" {
+		t.Fatalf("error = %q, want grep stderr", got)
+	}
+}

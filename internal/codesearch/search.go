@@ -51,6 +51,9 @@ func (s *Searcher) Search(query string) (string, error) {
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return "", ErrNoMatches
 		}
+		if message := strings.TrimSpace(string(output)); message != "" {
+			return "", fmt.Errorf("grep: %s", message)
+		}
 		return "", fmt.Errorf("grep: %w", err)
 	}
 	return strings.TrimSpace(string(output)), nil
