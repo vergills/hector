@@ -61,6 +61,18 @@ func TestNormalizeSearchPatternRejectsMultipleLines(t *testing.T) {
 	}
 }
 
+func TestFormatCodeSearchOutputGroupsFiles(t *testing.T) {
+	blocks := formatCodeSearchOutput("./internal/bot/bot.go:12:func handleMessage()\n./internal/bot/bot.go:20:return\n./README.md:4:go run ./cmd/hector")
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %d, want 1", len(blocks))
+	}
+	for _, want := range []string{"**internal/bot/bot.go**", "- `12` `func handleMessage()`", "- `20` `return`", "**README.md**"} {
+		if !strings.Contains(blocks[0], want) {
+			t.Fatalf("formatted output does not contain %q: %s", want, blocks[0])
+		}
+	}
+}
+
 func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
 	prompt := buildPrompt("", "user", "42", "Hector", "Who are you?", 400)
 	for _, want := range []string{

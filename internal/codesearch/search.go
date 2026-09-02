@@ -23,7 +23,7 @@ func New(root string) (*Searcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository path: %w", err)
 	}
-	return &Searcher{Root: root, MaxOutputSize: 12000, Timeout: 5 * time.Second}, nil
+	return &Searcher{Root: root, MaxOutputSize: 50000, Timeout: 5 * time.Second}, nil
 }
 
 func (s *Searcher) Search(pattern string) (string, error) {

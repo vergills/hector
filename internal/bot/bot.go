@@ -277,7 +277,7 @@ func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordg
 		s.sendMessage(session, message.ChannelID, "Code search failed: "+err.Error())
 		return
 	}
-	for _, block := range splitCodeSearchOutput(output) {
+	for _, block := range formatCodeSearchOutput(output) {
 		s.sendMessage(session, message.ChannelID, block)
 	}
 }
@@ -321,6 +321,7 @@ func splitCodeSearchOutput(output string) []string {
 			blocks = append(blocks, "```text\n"+current+"\n```")
 			current = ""
 		}
+
 		if current != "" {
 			current += "\n"
 		}
@@ -330,6 +331,43 @@ func splitCodeSearchOutput(output string) []string {
 		blocks = append(blocks, "```text\n"+current+"\n```")
 	}
 	return blocks
+}
+
+func formatCodeSearchOutput(output string) []string {
+	type fileMatches struct {
+		name    string
+		matches []string
+	}
+	grouped := make([]fileMatches, 0)
+	index := make(map[string]int)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		file := strings.TrimPrefix(parts[0], "./")
+		match := fmt.Sprintf("`%s` `%s`", parts[1], strings.ReplaceAll(strings.TrimSpace(parts[2]), "`", "'"))
+		position, ok := index[file]
+		if !ok {
+			position = len(grouped)
+			index[file] = position
+			grouped = append(grouped, fileMatches{name: file})
+		}
+		grouped[position].matches = append(grouped[position].matches, "- "+match)
+	}
+	lines := make([]string, 0)
+	for _, file := range grouped {
+		lines = append(lines, "**"+file.name+"**")
+		lines = append(lines, file.matches...)
+		lines = append(lines, "")
+	}
+	if len(lines) == 0 {
+		return splitDiscordMessage(output)
+	}
+	return splitDiscordMessage(strings.TrimSpace(strings.Join(lines, "\n")))
 }
 
 func extractSubcommand(content, prefix, botID, name string) (string, bool) {
