@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +29,7 @@ type Service struct {
 	HelpText           string
 	MaxResponseChars   int
 	CodeSearcher       CodeSearcher
+	Logger             *slog.Logger
 	replyMu            sync.RWMutex
 	replies            map[string]string
 }
@@ -52,6 +55,7 @@ func New(client *gemini.Client, prefix string, maxContextMessages int, helpText 
 		HelpText:           helpText,
 		MaxResponseChars:   maxResponseChars,
 		CodeSearcher:       codeSearcher,
+		Logger:             slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		replies:            make(map[string]string),
 	}
 }
@@ -70,15 +74,28 @@ func (s *Service) Start(discordToken string) error {
 	}
 	defer dg.Close()
 
-	fmt.Println("hector is online")
-	fmt.Println("prefix:", s.Prefix)
+	s.logInfo("discord session opened", "prefix", s.Prefix, "intents", dg.Identify.Intents)
 
 	<-s.Shutdown
 	return nil
 }
 
 func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.MessageCreate) {
-	if message == nil || message.Author == nil || message.Author.Bot {
+	if message == nil || message.Message == nil {
+		s.logError("message received without payload", nil)
+		return
+	}
+	s.logInfo("message received",
+		"message_id", message.ID,
+		"channel_id", message.ChannelID,
+		"author_id", authorID(message.Author),
+		"author_bot", message.Author != nil && message.Author.Bot,
+		"content_chars", len(message.Content),
+		"embed_count", len(message.Embeds),
+		"has_reference", message.MessageReference != nil,
+		"has_referenced_message", message.ReferencedMessage != nil,
+	)
+	if message.Author == nil || message.Author.Bot {
 		return
 	}
 
@@ -87,9 +104,13 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		if hydrated, err := session.ChannelMessage(message.ChannelID, message.ID); err == nil && hydrated != nil {
 			message.Message = hydrated
 			content = messageTextForPrompt(message.Message)
+			s.logInfo("message hydrated", "message_id", message.ID, "embed_count", len(message.Embeds), "content_chars", len(message.Content))
+		} else if err != nil {
+			s.logError("message hydration failed", err, "message_id", message.ID, "channel_id", message.ChannelID)
 		}
 	}
 	if content == "" {
+		s.logInfo("message ignored without prompt text", "message_id", message.ID, "embed_count", len(message.Embeds))
 		return
 	}
 
@@ -105,7 +126,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 
 	ctxPrompt, ctxCount, okCtx, err := parseContextCommand(content, s.Prefix, session.State.User.ID)
 	if err != nil {
-		_, _ = session.ChannelMessageSend(message.ChannelID, err.Error())
+		s.sendMessage(session, message.ChannelID, err.Error())
 		return
 	}
 
@@ -115,11 +136,11 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		}
 		contextText, err := s.readRecentContext(session, message, ctxCount)
 		if err != nil {
-			contextText = ""
+			s.logError("recent context lookup failed", err, "message_id", message.ID, "channel_id", message.ChannelID)
 		}
 		response, err := s.generateResponse(message, ctxPrompt, contextText)
 		if err != nil {
-			_, _ = session.ChannelMessageSend(message.ChannelID, "I hit a problem: "+err.Error())
+			s.sendMessage(session, message.ChannelID, "I hit a problem: "+err.Error())
 			return
 		}
 		for _, block := range splitDiscordMessage(response) {
@@ -137,18 +158,20 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		prompt, ok = extractNamePrompt(content, session.State.User.Username)
 	}
 	if !ok {
+		s.logInfo("message ignored without trigger", "message_id", message.ID, "reference_id", referenceID(message.Message))
 		return
 	}
 	if prompt == "" {
-		_, _ = session.ChannelMessageSend(message.ChannelID, s.HelpText)
+		s.sendMessage(session, message.ChannelID, s.HelpText)
 		return
 	}
 
 	replyContext := s.contextFromReply(session, message)
+	s.logInfo("reply context prepared", "message_id", message.ID, "reference_id", referenceID(message.Message), "context_chars", len(replyContext))
 	s.reactToMessage(session, message, prompt)
 	response, err := s.generateResponse(message, prompt, replyContext)
 	if err != nil {
-		_, _ = session.ChannelMessageSend(message.ChannelID, "I hit a problem: "+err.Error())
+		s.sendMessage(session, message.ChannelID, "I hit a problem: "+err.Error())
 		return
 	}
 	for _, block := range splitDiscordMessage(response) {
@@ -167,14 +190,14 @@ func (s *Service) handleVersion(session *discordgo.Session, message *discordgo.M
 	if info.Modified {
 		state = "modified source"
 	}
-	_, _ = session.ChannelMessageSend(message.ChannelID,
+	s.sendMessage(session, message.ChannelID,
 		fmt.Sprintf("running commit `%s` (%s)\nheader: %s\ndescription: %s\ntimestamp: `%s`\ngo: `%s`\nrepository: %s",
 			revision, state, info.Subject, info.Body, info.Time, info.GoVersion, version.RepositoryURL))
 }
 
 func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordgo.MessageCreate, question string) {
 	if strings.TrimSpace(question) == "" {
-		_, _ = session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Usage: `%s code <what to search for>`", s.Prefix))
+		s.sendMessage(session, message.ChannelID, fmt.Sprintf("Usage: `%s code <what to search for>`", s.Prefix))
 		return
 	}
 
@@ -183,25 +206,27 @@ func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordg
 		"User request: " + question
 	pattern, err := s.Client.Generate(context.Background(), prompt)
 	if err != nil {
-		_, _ = session.ChannelMessageSend(message.ChannelID, "I hit a problem generating the code search: "+err.Error())
+		s.logError("code search pattern generation failed", err, "message_id", message.ID)
+		s.sendMessage(session, message.ChannelID, "I hit a problem generating the code search: "+err.Error())
 		return
 	}
 	pattern = strings.TrimSpace(strings.Trim(pattern, "`"))
 	if s.CodeSearcher == nil {
-		_, _ = session.ChannelMessageSend(message.ChannelID, "Code search is not configured.")
+		s.sendMessage(session, message.ChannelID, "Code search is not configured.")
 		return
 	}
 	output, err := s.CodeSearcher.Search(pattern)
 	if err != nil {
 		if errors.Is(err, codesearch.ErrNoMatches) {
-			_, _ = session.ChannelMessageSend(message.ChannelID, "No matching source lines found.")
+			s.sendMessage(session, message.ChannelID, "No matching source lines found.")
 			return
 		}
-		_, _ = session.ChannelMessageSend(message.ChannelID, "Code search failed: "+err.Error())
+		s.logError("code search failed", err, "message_id", message.ID)
+		s.sendMessage(session, message.ChannelID, "Code search failed: "+err.Error())
 		return
 	}
 	for _, block := range splitCodeSearchOutput(output) {
-		_, _ = session.ChannelMessageSend(message.ChannelID, block)
+		s.sendMessage(session, message.ChannelID, block)
 	}
 }
 
@@ -246,8 +271,10 @@ func extractSubcommand(content, prefix, botID, name string) (string, bool) {
 func (s *Service) isReplyToBot(session *discordgo.Session, message *discordgo.MessageCreate, botID string) bool {
 	referenced := s.referencedMessage(session, message)
 	if referenced == nil || referenced.Author == nil {
+		s.logInfo("reply target unavailable", "message_id", message.ID, "reference_id", referenceID(message.Message))
 		return false
 	}
+	s.logInfo("reply target resolved", "message_id", message.ID, "reference_id", referenced.ID, "author_id", referenced.Author.ID, "is_bot", referenced.Author.ID == botID)
 	return referenced.Author.ID == botID
 }
 
@@ -279,13 +306,16 @@ func (s *Service) reactToMessage(session *discordgo.Session, message *discordgo.
 	}
 	response, err := s.Client.Generate(context.Background(), "Pick exactly one single emoji that best matches the intent of this Discord message. Only return a single emoji character, no text, no code block, no explanation. Message: "+prompt)
 	if err != nil {
+		s.logError("reaction selection failed", err, "message_id", message.ID)
 		return
 	}
 	emoji := firstEmoji(response)
 	if emoji == "" {
 		return
 	}
-	_ = session.MessageReactionAdd(message.ChannelID, message.ID, emoji)
+	if err := session.MessageReactionAdd(message.ChannelID, message.ID, emoji); err != nil {
+		s.logError("message reaction failed", err, "message_id", message.ID, "emoji", emoji)
+	}
 }
 
 func firstEmoji(text string) string {
@@ -311,6 +341,7 @@ func (s *Service) readRecentContext(session *discordgo.Session, message *discord
 	if err != nil {
 		return "", err
 	}
+	s.logInfo("recent context loaded", "message_id", message.ID, "requested", count, "received", len(messages))
 	parts := make([]string, 0, len(messages))
 	for i := len(messages) - 1; i >= 0; i-- {
 		item := messages[i]
@@ -386,6 +417,9 @@ func (s *Service) contextFromReply(session *discordgo.Session, message *discordg
 	}
 	seen := map[string]bool{}
 	current := s.referencedMessage(session, message)
+	if current == nil {
+		s.logInfo("reply context unavailable", "message_id", message.ID, "reference_id", referenceID(message.Message))
+	}
 	for current != nil {
 		if current.ID != "" && seen[current.ID] {
 			break
@@ -398,11 +432,14 @@ func (s *Service) contextFromReply(session *discordgo.Session, message *discordg
 			cachedText := s.replies[current.ID]
 			s.replyMu.RUnlock()
 			if cachedText != "" {
+				s.logInfo("reply context loaded from cache", "message_id", message.ID, "reference_id", current.ID, "context_chars", len(cachedText))
 				return cachedText
 			}
 			text := messageTextForPrompt(current)
 			if text != "" {
-				return s.addPreviousUserMessage(session, current, text)
+				context := s.addPreviousUserMessage(session, current, text)
+				s.logInfo("reply context loaded from Discord", "message_id", message.ID, "reference_id", current.ID, "context_chars", len(context))
+				return context
 			}
 		}
 		if current.MessageReference != nil && current.MessageReference.MessageID != "" {
@@ -423,6 +460,7 @@ func (s *Service) addPreviousUserMessage(session *discordgo.Session, botMessage 
 	}
 	previous, err := session.ChannelMessages(botMessage.ChannelID, 10, botMessage.ID, "", "")
 	if err != nil {
+		s.logError("previous user message lookup failed", err, "message_id", botMessage.ID)
 		return botText
 	}
 	for _, candidate := range previous {
@@ -460,6 +498,7 @@ func (s *Service) referencedMessage(session *discordgo.Session, message *discord
 	}
 	referenced, err := session.ChannelMessage(referenceChannelID(message.Message), message.MessageReference.MessageID)
 	if err != nil {
+		s.logError("reply target fetch failed", err, "reference_id", message.MessageReference.MessageID, "channel_id", referenceChannelID(message.Message))
 		return nil
 	}
 	return referenced
@@ -481,8 +520,13 @@ func (s *Service) rememberReply(session *discordgo.Session, channelID, content, 
 	}
 	sent, err := session.ChannelMessageSend(channelID, content)
 	if err != nil || sent == nil || sent.ID == "" {
+		if err == nil {
+			err = errors.New("Discord returned an empty sent message")
+		}
+		s.logError("message send failed", err, "channel_id", channelID)
 		return
 	}
+	s.logInfo("message sent", "message_id", sent.ID, "channel_id", channelID, "content_chars", len(content))
 	s.replyMu.Lock()
 	if s.replies == nil {
 		s.replies = make(map[string]string)
@@ -493,6 +537,46 @@ func (s *Service) rememberReply(session *discordgo.Session, channelID, content, 
 	}
 	s.replies[sent.ID] = context
 	s.replyMu.Unlock()
+}
+
+func (s *Service) sendMessage(session *discordgo.Session, channelID, content string) {
+	if session == nil {
+		s.logError("message send skipped: Discord session is nil", nil, "channel_id", channelID)
+		return
+	}
+	if _, err := session.ChannelMessageSend(channelID, content); err != nil {
+		s.logError("message send failed", err, "channel_id", channelID, "content_chars", len(content))
+	}
+}
+
+func (s *Service) logInfo(message string, args ...any) {
+	if s.Logger != nil {
+		s.Logger.Info(message, args...)
+	}
+}
+
+func (s *Service) logError(message string, err error, args ...any) {
+	if s.Logger == nil {
+		return
+	}
+	if err != nil {
+		args = append(args, "error", err.Error())
+	}
+	s.Logger.Error(message, args...)
+}
+
+func authorID(author *discordgo.User) string {
+	if author == nil {
+		return ""
+	}
+	return author.ID
+}
+
+func referenceID(message *discordgo.Message) string {
+	if message == nil || message.MessageReference == nil {
+		return ""
+	}
+	return message.MessageReference.MessageID
 }
 
 func parseContextCommand(content, prefix, botID string) (string, int, bool, error) {
