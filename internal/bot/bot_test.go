@@ -48,6 +48,7 @@ func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
 		"You are Hector",
 		"when a user says Hector, they are addressing you directly",
 		"the first person",
+		"do not use punctuation",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt does not contain identity instruction %q", want)
