@@ -1,5 +1,5 @@
 # hector
-That dude from the Fast movies, but as a bot.
+Throw-away Discord bot, vibe-coded over-night by yours truly on a freakin’ iPad.
 
 ## Project structure
 
