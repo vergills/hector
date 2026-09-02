@@ -143,12 +143,14 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		if ctxCount > s.MaxContextMessages {
 			ctxCount = s.MaxContextMessages
 		}
+		stopTyping := s.startTyping(session, message.ChannelID)
 		contextText, err := s.readRecentContext(session, message, ctxCount)
 		if err != nil {
 			s.logError("recent context lookup failed", err, "message_id", message.ID, "channel_id", message.ChannelID)
 		}
 		response, err := s.generateResponse(message, ctxPrompt, contextText)
 		if err != nil {
+			stopTyping()
 			s.sendMessage(session, message.ChannelID, "I hit a problem: "+err.Error())
 			return
 		}
@@ -156,6 +158,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 			s.rememberReply(session, message.ChannelID, block, ctxPrompt, contextText)
 			time.Sleep(200 * time.Millisecond)
 		}
+		stopTyping()
 		return
 	}
 
@@ -172,14 +175,17 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 	}
 	if prompt == "" {
 		if message.MessageReference == nil {
+			stopTyping := s.startTyping(session, message.ChannelID)
 			contextText, err := s.readRecentContext(session, message, 5)
 			if err != nil {
+				stopTyping()
 				s.logError("fallback context lookup failed", err, "message_id", message.ID, "channel_id", message.ChannelID)
 				s.sendMessage(session, message.ChannelID, "I hit a problem loading recent context: "+err.Error())
 				return
 			}
 			response, err := s.generateResponse(message, "Respond to the recent conversation.", contextText)
 			if err != nil {
+				stopTyping()
 				s.sendMessage(session, message.ChannelID, "I hit a problem: "+err.Error())
 				return
 			}
@@ -187,6 +193,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 				s.rememberReply(session, message.ChannelID, block, "Respond to the recent conversation.", contextText)
 				time.Sleep(200 * time.Millisecond)
 			}
+			stopTyping()
 			return
 		}
 		s.sendMessage(session, message.ChannelID, s.HelpText)
@@ -195,9 +202,11 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 
 	replyContext := s.contextFromReply(session, message)
 	s.logInfo("reply context prepared", "message_id", message.ID, "reference_id", referenceID(message.Message), "context_chars", len(replyContext))
+	stopTyping := s.startTyping(session, message.ChannelID)
 	s.reactToMessage(session, message, prompt)
 	response, err := s.generateResponse(message, prompt, replyContext)
 	if err != nil {
+		stopTyping()
 		s.sendMessage(session, message.ChannelID, "I hit a problem: "+err.Error())
 		return
 	}
@@ -205,6 +214,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		s.rememberReply(session, message.ChannelID, block, prompt, replyContext)
 		time.Sleep(200 * time.Millisecond)
 	}
+	stopTyping()
 }
 
 func (s *Service) handleVersion(session *discordgo.Session, message *discordgo.MessageCreate) {
@@ -582,6 +592,35 @@ func (s *Service) sendMessage(session *discordgo.Session, channelID, content str
 	}
 	if _, err := session.ChannelMessageSend(channelID, content); err != nil {
 		s.logError("message send failed", err, "channel_id", channelID, "content_chars", len(content))
+	}
+}
+
+func (s *Service) startTyping(session *discordgo.Session, channelID string) func() {
+	stop := make(chan struct{})
+	sendTyping := func() {
+		if err := session.ChannelTyping(channelID); err != nil {
+			s.logError("typing indicator failed", err, "channel_id", channelID)
+		}
+	}
+	sendTyping()
+	go func() {
+		ticker := time.NewTicker(8 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sendTyping()
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() {
+		select {
+		case <-stop:
+		default:
+			close(stop)
+		}
 	}
 }
 
