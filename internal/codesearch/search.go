@@ -33,14 +33,17 @@ func New(root string, maxOutputSize int, timeout time.Duration) (*Searcher, erro
 }
 
 func (s *Searcher) Search(query string) (string, error) {
-	if strings.TrimSpace(query) == "" || len(query) > 200 || strings.ContainsAny(query, "\r\n\x00") {
+	args, err := shellFields(query)
+	if err != nil {
+		return "", err
+	}
+	if len(args) == 0 || len(query) > 200 || strings.ContainsAny(query, "\r\n\x00") {
 		return "", fmt.Errorf("invalid search query")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.Timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "grep", "-RInF", "-C", "3",
-		"--exclude-dir=.git", "--exclude-dir=vendor", "--exclude-dir=node_modules",
-		"--exclude=*.sum", "--exclude=.env", "--exclude=.env.*", "--", query, ".")
+	args = append(args, ".")
+	cmd := exec.CommandContext(ctx, "grep", args...)
 	cmd.Dir = s.Root
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -57,4 +60,47 @@ func (s *Searcher) Search(query string) (string, error) {
 		output = output[:s.MaxOutputSize]
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func shellFields(input string) ([]string, error) {
+	var fields []string
+	var current strings.Builder
+	var quote rune
+	escaped := false
+	for _, r := range input {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' && quote != '\'' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+			} else {
+				current.WriteRune(r)
+			}
+			continue
+		}
+		if r == '\'' || r == '"' {
+			quote = r
+		} else if r == ' ' || r == '\t' {
+			if current.Len() > 0 {
+				fields = append(fields, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteRune(r)
+		}
+	}
+	if escaped || quote != 0 {
+		return nil, fmt.Errorf("unterminated quote or escape")
+	}
+	if current.Len() > 0 {
+		fields = append(fields, current.String())
+	}
+	return fields, nil
 }
