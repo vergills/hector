@@ -43,24 +43,6 @@ func TestReplaceDiscordMentionsUsesDisplayNames(t *testing.T) {
 
 }
 
-func TestNormalizeSearchPattern(t *testing.T) {
-	got, err := normalizeSearchPattern("```regex\nreplyContext\n```")
-	if err != nil {
-		t.Fatalf("normalizeSearchPattern returned error: %v", err)
-	}
-
-	if got != "replyContext" {
-		t.Fatalf("pattern = %q, want %q", got, "replyContext")
-	}
-
-}
-
-func TestNormalizeSearchPatternRejectsMultipleLines(t *testing.T) {
-	if _, err := normalizeSearchPattern("one\ntwo"); err == nil {
-		t.Fatal("expected multiline pattern to be rejected")
-	}
-}
-
 func TestFormatCodeSearchOutputGroupsFiles(t *testing.T) {
 	blocks := formatCodeSearchOutput("./internal/bot/bot.go:12:func handleMessage()\n./internal/bot/bot.go:20:return\n./README.md:4:go run ./cmd/hector")
 	if len(blocks) != 1 {

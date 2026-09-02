@@ -16,6 +16,8 @@ const (
 	DefaultHelpText           = "Ask me something, like `h hello`."
 	DefaultMaxResponseChars   = 250
 	DefaultMaxOutputTokens    = 512
+	DefaultCodeSearchMaxBytes = 50000
+	DefaultCodeSearchTimeout  = 5
 )
 
 type Config struct {
@@ -29,6 +31,8 @@ type Config struct {
 	HelpText           string
 	MaxResponseChars   int
 	MaxOutputTokens    int
+	CodeSearchMaxBytes int
+	CodeSearchTimeout  int
 }
 
 func Load() Config {
@@ -43,6 +47,8 @@ func Load() Config {
 		HelpText:           DefaultHelpText,
 		MaxResponseChars:   DefaultMaxResponseChars,
 		MaxOutputTokens:    DefaultMaxOutputTokens,
+		CodeSearchMaxBytes: DefaultCodeSearchMaxBytes,
+		CodeSearchTimeout:  DefaultCodeSearchTimeout,
 	}
 
 	cfg.DiscordToken = getEnv("DISCORD_TOKEN")
@@ -55,6 +61,8 @@ func Load() Config {
 	cfg.HelpText = getEnvWithFallback("HELP_TEXT", cfg.HelpText)
 	cfg.MaxResponseChars = getIntWithFallback("MAX_RESPONSE_CHARS", cfg.MaxResponseChars)
 	cfg.MaxOutputTokens = getIntWithFallback("MAX_OUTPUT_TOKENS", cfg.MaxOutputTokens)
+	cfg.CodeSearchMaxBytes = getIntWithFallback("CODE_SEARCH_MAX_BYTES", cfg.CodeSearchMaxBytes)
+	cfg.CodeSearchTimeout = getIntWithFallback("CODE_SEARCH_TIMEOUT_SECONDS", cfg.CodeSearchTimeout)
 
 	return cfg
 }

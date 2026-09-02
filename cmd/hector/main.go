@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/vergills/hector/internal/bot"
 	"github.com/vergills/hector/internal/codesearch"
@@ -21,7 +22,7 @@ func main() {
 	}
 
 	client := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.SystemPrompt, cfg.MaxResponseChars, cfg.MaxOutputTokens)
-	codeSearcher, err := codesearch.New(".")
+	codeSearcher, err := codesearch.New(".", cfg.CodeSearchMaxBytes, time.Duration(cfg.CodeSearchTimeout)*time.Second)
 	if err != nil {
 		logger.Error("code search initialization failed", "error", err.Error())
 		os.Exit(1)

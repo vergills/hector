@@ -35,6 +35,8 @@ The app reads the following values from `.env` or the shell environment:
 - `HELP_TEXT` – text shown when the user sends a blank prompt
 - `MAX_RESPONSE_CHARS` – max output length, default `250`
 - `MAX_OUTPUT_TOKENS` – Gemini output-token ceiling, default `512`; optional thinking is disabled to preserve room for the visible response
+- `CODE_SEARCH_MAX_BYTES` – maximum CodeSearch output size, default `50000`
+- `CODE_SEARCH_TIMEOUT_SECONDS` – CodeSearch timeout, default `5`
 
 ## Usage
 
@@ -68,13 +70,13 @@ Discord user mentions must use the platform's ID-based format:
 
 The bot supplies user IDs to Gemini and instructs it not to emit plain `@username` mentions.
 
-For source-code lookup, use:
+For source-code lookup, pass the literal text to search for:
 
 ```text
-h code how does reply handling work?
+h code -Fi replyContext
 ```
 
-Gemini is used only to produce a safe `grep -E` search pattern. The bot runs the local search itself and returns the matching source lines in code fences; grep output is never sent back to Gemini.
+CodeSearch runs a fixed-string, case-insensitive grep with three lines of context before and after each match. It does not call Gemini.
 
 To see the commit the running process was built from, use:
 

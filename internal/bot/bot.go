@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -244,30 +243,11 @@ func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordg
 		return
 	}
 
-	prompt := "Return only one safe grep -E regular expression for searching this Go repository. " +
-		"Do not use shell syntax, flags, paths, backticks, or newlines. Search terms should be concise and match source identifiers or concepts. " +
-		"Ignore the conversational persona for this request and return only the regex. " +
-		"User request: " + question
-	pattern, err := s.Client.GenerateWithSystemPrompt(context.Background(),
-		"You generate one safe grep regular expression for a Go repository. Return only the expression.",
-		prompt)
-	if err != nil {
-		s.logError("code search pattern generation failed", err, "message_id", message.ID)
-		s.sendMessage(session, message.ChannelID, "I hit a problem generating the code search: "+err.Error())
-		return
-	}
-	rawPattern := pattern
-	pattern, err = normalizeSearchPattern(pattern)
-	if err != nil {
-		s.logError("invalid code search pattern from Gemini", err, "message_id", message.ID, "pattern_chars", len(rawPattern))
-		s.sendMessage(session, message.ChannelID, "Code search generated an invalid pattern; please try a more specific request.")
-		return
-	}
 	if s.CodeSearcher == nil {
 		s.sendMessage(session, message.ChannelID, "Code search is not configured.")
 		return
 	}
-	output, err := s.CodeSearcher.Search(pattern)
+	output, err := s.CodeSearcher.Search(question)
 	if err != nil {
 		if errors.Is(err, codesearch.ErrNoMatches) {
 			s.sendMessage(session, message.ChannelID, "No matching source lines found.")
@@ -280,35 +260,6 @@ func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordg
 	for _, block := range formatCodeSearchOutput(output) {
 		s.sendMessage(session, message.ChannelID, block)
 	}
-}
-
-func normalizeSearchPattern(pattern string) (string, error) {
-	pattern = strings.TrimSpace(pattern)
-	pattern = strings.TrimPrefix(pattern, "```regex")
-	pattern = strings.TrimPrefix(pattern, "```regexp")
-	pattern = strings.TrimPrefix(pattern, "```")
-	pattern = strings.TrimSuffix(pattern, "```")
-	lines := strings.Split(pattern, "\n")
-	nonEmpty := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line = strings.TrimSpace(line); line != "" {
-			nonEmpty = append(nonEmpty, line)
-		}
-	}
-	if len(nonEmpty) == 0 {
-		return "", fmt.Errorf("pattern is empty")
-	}
-	if len(nonEmpty) > 1 {
-		return "", fmt.Errorf("pattern contains multiple lines")
-	}
-	pattern = nonEmpty[0]
-	if len(pattern) > 200 || strings.ContainsRune(pattern, '\x00') {
-		return "", fmt.Errorf("pattern exceeds the allowed size or contains a null byte")
-	}
-	if _, err := regexp.Compile(pattern); err != nil {
-		return "", fmt.Errorf("pattern is not valid regular expression: %w", err)
-	}
-	return pattern, nil
 }
 
 func splitCodeSearchOutput(output string) []string {
@@ -360,7 +311,7 @@ func formatCodeSearchOutput(output string) []string {
 	}
 	lines := make([]string, 0)
 	for _, file := range grouped {
-		lines = append(lines, "**"+file.name+"**")
+		lines = append(lines, "**"+file.name+"**\n")
 		lines = append(lines, file.matches...)
 		lines = append(lines, "")
 	}
