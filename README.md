@@ -69,3 +69,11 @@ h code how does reply handling work?
 ```
 
 Gemini is used only to produce a safe `grep -E` search pattern. The bot runs the local search itself and returns the matching source lines in code fences; grep output is never sent back to Gemini.
+
+To see the commit the running process was built from, use:
+
+```text
+h version
+```
+
+The response includes the short Git revision, commit header, commit description, build timestamp, Go version, and whether Go detected modified source at build time.

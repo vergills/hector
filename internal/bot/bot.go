@@ -11,6 +11,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/vergills/hector/internal/codesearch"
 	"github.com/vergills/hector/internal/gemini"
+	"github.com/vergills/hector/internal/version"
 )
 
 type CodeSearcher interface {
@@ -87,12 +88,17 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		s.handleCodeSearch(session, message, codeQuery)
 		return
 	}
+	if _, okVersion := extractSubcommand(content, s.Prefix, session.State.User.ID, "version"); okVersion {
+		s.handleVersion(session, message)
+		return
+	}
 
 	ctxPrompt, ctxCount, okCtx, err := parseContextCommand(content, s.Prefix, session.State.User.ID)
 	if err != nil {
 		_, _ = session.ChannelMessageSend(message.ChannelID, err.Error())
 		return
 	}
+
 	if okCtx {
 		if ctxCount > s.MaxContextMessages {
 			ctxCount = s.MaxContextMessages
@@ -134,6 +140,21 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		_, _ = session.ChannelMessageSend(message.ChannelID, block)
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func (s *Service) handleVersion(session *discordgo.Session, message *discordgo.MessageCreate) {
+	info := version.Current()
+	revision := info.Revision
+	if len(revision) > 12 {
+		revision = revision[:12]
+	}
+	state := "clean"
+	if info.Modified {
+		state = "modified source"
+	}
+	_, _ = session.ChannelMessageSend(message.ChannelID,
+		fmt.Sprintf("running commit `%s` (%s)\nheader: %s\ndescription: %s\nbuilt: `%s`\ngo: `%s`",
+			revision, state, info.Subject, info.Body, info.Time, info.GoVersion))
 }
 
 func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordgo.MessageCreate, question string) {
