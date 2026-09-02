@@ -1,0 +1,16 @@
+[Unit]
+Description=Hector Discord Gemini bot (container)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman rm -f hector
+ExecStart=/usr/bin/podman run --name hector --rm --env-file=/root/.config/hector.env --read-only --cap-drop=all --security-opt=no-new-privileges --pids-limit=128 --network=host -v /root/hector:/workspace:ro,Z hector:latest
+ExecStop=/usr/bin/podman stop -t 10 hector
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

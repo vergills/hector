@@ -8,17 +8,26 @@ Throw-away Discord bot, vibe-coded over-night by yours truly on a freakin’ iPa
 - `internal/bot` – Discord command handling, context lookups, and prompt assembly
 - `internal/gemini` – Gemini API client
 - `/root/.config/hector.env` – runtime environment file loaded by the systemd service
+- `Containerfile` – image definition for the containerized service
 
 ## Setup
 
 1. Create `/root/.config/hector.env` with your Discord bot token and Gemini API key
 2. In the Discord Developer Portal, enable the **Message Content Intent** for the bot
 3. Adjust the optional config values if needed
-4. Run:
+4. Build and install the containerized service:
 
 ```bash
-go run ./cmd/hector
+podman build -t hector:latest .
+cp hector.container.service ~/.config/systemd/user/hector.service
+systemctl --user daemon-reload
+systemctl --user enable --now hector.service
 ```
+
+The service runs Hector as an unprivileged user inside a read-only container. Only
+the repository is mounted at `/workspace`, so `h grep` cannot access host paths
+outside that mount. The secrets file is read by Podman on the host and injected
+as environment variables; it is not mounted into the container.
 
 ## Configuration
 
