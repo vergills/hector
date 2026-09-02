@@ -78,10 +78,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 
-	content := strings.TrimSpace(message.Content)
-	if content == "" && len(message.Embeds) > 0 {
-		content = messageTextForPrompt(message.Message)
-	}
+	content := messageTextForPrompt(message.Message)
 	if content == "" {
 		return
 	}
@@ -269,24 +266,33 @@ func (s *Service) reactToMessage(session *discordgo.Session, message *discordgo.
 	if session == nil || message == nil || message.Message == nil {
 		return
 	}
-	lower := strings.ToLower(prompt)
-	var emoji string
-	switch {
-	case strings.Contains(lower, "hello") || strings.Contains(lower, "hi") || strings.Contains(lower, "hey"):
-		emoji = "👋"
-	case strings.Contains(lower, "thanks") || strings.Contains(lower, "thank you"):
-		emoji = "🙏"
-	case strings.Contains(lower, "lol") || strings.Contains(lower, "haha") || strings.Contains(lower, "funny"):
-		emoji = "😂"
-	case strings.Contains(lower, "?"):
-		emoji = "🤔"
-	case strings.Contains(lower, "bug") || strings.Contains(lower, "error") || strings.Contains(lower, "broken"):
-		emoji = "🛠️"
+	if len(strings.TrimSpace(prompt)) == 0 {
+		return
 	}
+	response, err := s.Client.Generate(context.Background(), "Pick exactly one single emoji that best matches the intent of this Discord message. Only return a single emoji character, no text, no code block, no explanation. Message: "+prompt)
+	if err != nil {
+		return
+	}
+	emoji := firstEmoji(response)
 	if emoji == "" {
 		return
 	}
 	_ = session.MessageReactionAdd(message.ChannelID, message.ID, emoji)
+}
+
+func firstEmoji(text string) string {
+	for _, r := range text {
+		if r == ' ' || r == '\n' || r == '\t' || r == '\r' {
+			continue
+		}
+		if r >= 0x1F000 && r <= 0x10FFFF {
+			return string(r)
+		}
+		if r >= 0x2600 && r <= 0x27BF {
+			return string(r)
+		}
+	}
+	return ""
 }
 
 func (s *Service) readRecentContext(session *discordgo.Session, message *discordgo.MessageCreate, count int) (string, error) {
