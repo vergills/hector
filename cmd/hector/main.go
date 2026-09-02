@@ -26,7 +26,7 @@ func main() {
 		logger.Error("code search initialization failed", "error", err.Error())
 		os.Exit(1)
 	}
-	svc := bot.New(client, cfg.BotPrefix, cfg.MaxContextMessages, cfg.HelpText, cfg.MaxResponseChars, codeSearcher)
+	svc := bot.New(client, cfg.BotName, cfg.BotPrefix, cfg.MaxContextMessages, cfg.HelpText, cfg.MaxResponseChars, codeSearcher)
 	svc.Logger = logger
 
 	stop := make(chan os.Signal, 1)

@@ -9,11 +9,12 @@ import (
 
 const (
 	DefaultGeminiModel        = "gemini-3.5-flash-lite"
+	DefaultBotName            = "Hector"
 	DefaultBotPrefix          = "h"
 	DefaultMaxContextMessages = 8
 	DefaultSystemPrompt       = "You are a helpful assistant in Discord. Keep responses brief, clear, and useful. Do not exceed the configured character budget."
 	DefaultHelpText           = "Ask me something, like `h hello`."
-	DefaultMaxResponseChars   = 700
+	DefaultMaxResponseChars   = 400
 	DefaultMaxOutputTokens    = 512
 )
 
@@ -21,6 +22,7 @@ type Config struct {
 	DiscordToken       string
 	GeminiAPIKey       string
 	GeminiModel        string
+	BotName            string
 	BotPrefix          string
 	MaxContextMessages int
 	SystemPrompt       string
@@ -34,6 +36,7 @@ func Load() Config {
 
 	cfg := Config{
 		GeminiModel:        DefaultGeminiModel,
+		BotName:            DefaultBotName,
 		BotPrefix:          DefaultBotPrefix,
 		MaxContextMessages: DefaultMaxContextMessages,
 		SystemPrompt:       DefaultSystemPrompt,
@@ -45,6 +48,7 @@ func Load() Config {
 	cfg.DiscordToken = getEnv("DISCORD_TOKEN")
 	cfg.GeminiAPIKey = getEnv("GEMINI_API_KEY")
 	cfg.GeminiModel = getEnvWithFallback("GEMINI_MODEL", cfg.GeminiModel)
+	cfg.BotName = getEnvWithFallback("BOT_NAME", cfg.BotName)
 	cfg.BotPrefix = getEnvWithFallback("BOT_PREFIX", cfg.BotPrefix)
 	cfg.MaxContextMessages = getIntWithFallback("MAX_CONTEXT_MESSAGES", cfg.MaxContextMessages)
 	cfg.SystemPrompt = getEnvWithFallback("SYSTEM_PROMPT", cfg.SystemPrompt)

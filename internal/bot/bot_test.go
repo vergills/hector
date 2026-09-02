@@ -30,7 +30,7 @@ func TestExtractPromptFromDiscordMention(t *testing.T) {
 }
 
 func TestBuildPromptDefinesHectorIdentity(t *testing.T) {
-	prompt := buildPrompt("", "user", "42", "Who are you?", 700)
+	prompt := buildPrompt("", "user", "42", "Hector", "Who are you?", 400)
 	for _, want := range []string{
 		"You are Hector",
 		"Hector is you",

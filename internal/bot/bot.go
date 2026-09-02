@@ -23,6 +23,7 @@ type CodeSearcher interface {
 
 type Service struct {
 	Client             *gemini.Client
+	Name               string
 	Prefix             string
 	Shutdown           chan struct{}
 	MaxContextMessages int
@@ -34,7 +35,10 @@ type Service struct {
 	replies            map[string]string
 }
 
-func New(client *gemini.Client, prefix string, maxContextMessages int, helpText string, maxResponseChars int, codeSearcher CodeSearcher) *Service {
+func New(client *gemini.Client, name, prefix string, maxContextMessages int, helpText string, maxResponseChars int, codeSearcher CodeSearcher) *Service {
+	if name == "" {
+		name = "Hector"
+	}
 	if prefix == "" {
 		prefix = "h"
 	}
@@ -49,6 +53,7 @@ func New(client *gemini.Client, prefix string, maxContextMessages int, helpText 
 	}
 	return &Service{
 		Client:             client,
+		Name:               name,
 		Prefix:             prefix,
 		Shutdown:           make(chan struct{}),
 		MaxContextMessages: maxContextMessages,
@@ -167,7 +172,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		prompt, ok = content, true
 	}
 	if !ok {
-		prompt, ok = extractNamePrompt(content, session.State.User.Username)
+		prompt, ok = extractNamePrompt(content, s.Name)
 	}
 	if !ok {
 		s.logInfo("message ignored without trigger", "message_id", message.ID, "reference_id", referenceID(message.Message))
@@ -316,7 +321,7 @@ func (s *Service) isReplyToBot(session *discordgo.Session, message *discordgo.Me
 }
 
 func (s *Service) generateResponse(message *discordgo.MessageCreate, prompt, contextText string) (string, error) {
-	finalPrompt := buildPrompt(contextText, message.Author.Username, message.Author.ID, prompt, s.MaxResponseChars)
+	finalPrompt := buildPrompt(contextText, message.Author.Username, message.Author.ID, s.Name, prompt, s.MaxResponseChars)
 	response, err := s.Client.Generate(context.Background(), finalPrompt)
 	if err != nil {
 		var rateLimitErr *gemini.RateLimitError
@@ -698,12 +703,12 @@ func parseContextValue(afterPrefix, prefix string) (string, int, bool, error) {
 	return strings.Join(parts, " "), count, true, nil
 }
 
-func buildPrompt(contextText, username, userID, prompt string, maxResponseChars int) string {
-	base := "You are Hector, the Discord assistant speaking in this conversation. " +
-		"Hector is you, the AI assistant; it is not a separate person, topic, or third party. " +
-		"When a user says Hector, they are addressing you directly. " +
-		"Use first person (I/me) when referring to yourself, and do not describe Hector as someone else. " +
-		"Keep responses brief, clear, and useful. " +
+func buildPrompt(contextText, username, userID, botName, prompt string, maxResponseChars int) string {
+	base := "You are " + botName + ", the Discord assistant speaking in this conversation. " +
+		botName + " is you, the AI assistant; it is not a separate person, topic, or third party. " +
+		"When a user says " + botName + ", they are addressing you directly. " +
+		"Use first person (I/me) when referring to yourself, and do not describe " + botName + " as someone else. " +
+		"Keep responses very short, clear, and useful. Prefer 1-3 sentences. " +
 		"When mentioning a Discord user, always use Discord mention syntax like <@123456789>, never @username."
 	if contextText != "" {
 		base += "\nRecent channel context:\n" + contextText + "\n"
