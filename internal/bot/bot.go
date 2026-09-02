@@ -248,15 +248,18 @@ func (s *Service) handleCodeSearch(session *discordgo.Session, message *discordg
 		"Do not use shell syntax, flags, paths, backticks, or newlines. Search terms should be concise and match source identifiers or concepts. " +
 		"Ignore the conversational persona for this request and return only the regex. " +
 		"User request: " + question
-	pattern, err := s.Client.Generate(context.Background(), prompt)
+	pattern, err := s.Client.GenerateWithSystemPrompt(context.Background(),
+		"You generate one safe grep regular expression for a Go repository. Return only the expression.",
+		prompt)
 	if err != nil {
 		s.logError("code search pattern generation failed", err, "message_id", message.ID)
 		s.sendMessage(session, message.ChannelID, "I hit a problem generating the code search: "+err.Error())
 		return
 	}
+	rawPattern := pattern
 	pattern, err = normalizeSearchPattern(pattern)
 	if err != nil {
-		s.logError("invalid code search pattern from Gemini", err, "message_id", message.ID, "pattern_chars", len(pattern))
+		s.logError("invalid code search pattern from Gemini", err, "message_id", message.ID, "pattern_chars", len(rawPattern))
 		s.sendMessage(session, message.ChannelID, "Code search generated an invalid pattern; please try a more specific request.")
 		return
 	}

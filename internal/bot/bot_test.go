@@ -48,8 +48,16 @@ func TestNormalizeSearchPattern(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalizeSearchPattern returned error: %v", err)
 	}
+
 	if got != "replyContext" {
 		t.Fatalf("pattern = %q, want %q", got, "replyContext")
+	}
+
+}
+
+func TestNormalizeSearchPatternRejectsMultipleLines(t *testing.T) {
+	if _, err := normalizeSearchPattern("one\ntwo"); err == nil {
+		t.Fatal("expected multiline pattern to be rejected")
 	}
 }
 

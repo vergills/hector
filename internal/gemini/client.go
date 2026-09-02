@@ -84,6 +84,14 @@ func NewClient(apiKey, model, systemPrompt string, maxResponseChars, maxOutputTo
 }
 
 func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
+	return c.generate(ctx, c.SystemPrompt, prompt)
+}
+
+func (c *Client) GenerateWithSystemPrompt(ctx context.Context, systemPrompt, prompt string) (string, error) {
+	return c.generate(ctx, systemPrompt, prompt)
+}
+
+func (c *Client) generate(ctx context.Context, systemPrompt, prompt string) (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("gemini client is nil")
 	}
@@ -94,7 +102,7 @@ func (c *Client) Generate(ctx context.Context, prompt string) (string, error) {
 	payload := requestPayload{
 		Model:             c.Model,
 		Input:             prompt,
-		SystemInstruction: c.SystemPrompt,
+		SystemInstruction: systemPrompt,
 		Store:             false,
 	}
 	payload.GenerationConfig.MaxOutputTokens = c.MaxOutputTokens
