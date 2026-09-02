@@ -134,6 +134,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 
+	s.reactToMessage(session, message, prompt)
 	response, err := s.generateResponse(message, prompt, "")
 	if err != nil {
 		_, _ = session.ChannelMessageSend(message.ChannelID, "I hit a problem: "+err.Error())
@@ -255,6 +256,27 @@ func (s *Service) generateResponse(message *discordgo.MessageCreate, prompt, con
 		return "", err
 	}
 	return trimResponse(response, s.MaxResponseChars), nil
+}
+
+func (s *Service) reactToMessage(session *discordgo.Session, message *discordgo.MessageCreate, prompt string) {
+	if session == nil || message == nil || message.Message == nil {
+		return
+	}
+	lower := strings.ToLower(prompt)
+	emoji := "✅"
+	switch {
+	case strings.Contains(lower, "hello") || strings.Contains(lower, "hi") || strings.Contains(lower, "hey"):
+		emoji = "👋"
+	case strings.Contains(lower, "thanks") || strings.Contains(lower, "thank you"):
+		emoji = "🙏"
+	case strings.Contains(lower, "lol") || strings.Contains(lower, "haha") || strings.Contains(lower, "funny"):
+		emoji = "😂"
+	case strings.Contains(lower, "?"):
+		emoji = "🤔"
+	case strings.Contains(lower, "bug") || strings.Contains(lower, "error") || strings.Contains(lower, "broken"):
+		emoji = "🛠️"
+	}
+	_ = session.MessageReactionAdd(message.ChannelID, message.ID, emoji)
 }
 
 func (s *Service) readRecentContext(session *discordgo.Session, message *discordgo.MessageCreate, count int) (string, error) {
