@@ -13,8 +13,9 @@ Throw-away Discord bot, vibe-coded over-night by yours truly on a freakin’ iPa
 
 1. Copy `.env.example` to `.env`
 2. Fill in your Discord bot token and Gemini API key
-3. Adjust the optional config values if needed
-4. Run:
+3. In the Discord Developer Portal, enable the **Message Content Intent** for the bot
+4. Adjust the optional config values if needed
+5. Run:
 
 ```bash
 go run ./cmd/hector

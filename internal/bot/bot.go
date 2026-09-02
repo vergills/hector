@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -26,6 +27,8 @@ type Service struct {
 	HelpText           string
 	MaxResponseChars   int
 	CodeSearcher       CodeSearcher
+	replyMu            sync.RWMutex
+	replies            map[string]string
 }
 
 func New(client *gemini.Client, prefix string, maxContextMessages int, helpText string, maxResponseChars int, codeSearcher CodeSearcher) *Service {
@@ -49,6 +52,7 @@ func New(client *gemini.Client, prefix string, maxContextMessages int, helpText 
 		HelpText:           helpText,
 		MaxResponseChars:   maxResponseChars,
 		CodeSearcher:       codeSearcher,
+		replies:            make(map[string]string),
 	}
 }
 
@@ -59,7 +63,7 @@ func (s *Service) Start(discordToken string) error {
 	}
 
 	dg.AddHandler(s.handleMessage)
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages | discordgo.IntentsMessageContent
 
 	if err := dg.Open(); err != nil {
 		return fmt.Errorf("open discord session: %w", err)
@@ -113,14 +117,14 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 			return
 		}
 		for _, block := range splitDiscordMessage(response) {
-			_, _ = session.ChannelMessageSend(message.ChannelID, block)
+			s.rememberReply(session, message.ChannelID, block)
 			time.Sleep(200 * time.Millisecond)
 		}
 		return
 	}
 
 	prompt, ok := extractPrompt(content, s.Prefix, session.State.User.ID)
-	if !ok && isReplyToBot(session, message, session.State.User.ID) {
+	if !ok && s.isReplyToBot(session, message, session.State.User.ID) {
 		prompt, ok = content, true
 	}
 	if !ok {
@@ -134,7 +138,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 
-	replyContext := contextFromReply(session, message)
+	replyContext := s.contextFromReply(session, message)
 	s.reactToMessage(session, message, prompt)
 	response, err := s.generateResponse(message, prompt, replyContext)
 	if err != nil {
@@ -142,7 +146,7 @@ func (s *Service) handleMessage(session *discordgo.Session, message *discordgo.M
 		return
 	}
 	for _, block := range splitDiscordMessage(response) {
-		_, _ = session.ChannelMessageSend(message.ChannelID, block)
+		s.rememberReply(session, message.ChannelID, block)
 		time.Sleep(200 * time.Millisecond)
 	}
 }
@@ -233,8 +237,8 @@ func extractSubcommand(content, prefix, botID, name string) (string, bool) {
 	return strings.TrimSpace(trimmed[len(keyword):]), true
 }
 
-func isReplyToBot(session *discordgo.Session, message *discordgo.MessageCreate, botID string) bool {
-	referenced := referencedMessage(session, message)
+func (s *Service) isReplyToBot(session *discordgo.Session, message *discordgo.MessageCreate, botID string) bool {
+	referenced := s.referencedMessage(session, message)
 	if referenced == nil || referenced.Author == nil {
 		return false
 	}
@@ -359,12 +363,12 @@ func messageTextForPrompt(msg *discordgo.Message) string {
 	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
-func contextFromReply(session *discordgo.Session, message *discordgo.MessageCreate) string {
+func (s *Service) contextFromReply(session *discordgo.Session, message *discordgo.MessageCreate) string {
 	if session == nil || message == nil {
 		return ""
 	}
 	seen := map[string]bool{}
-	current := referencedMessage(session, message)
+	current := s.referencedMessage(session, message)
 	for current != nil {
 		if current.ID != "" && seen[current.ID] {
 			break
@@ -379,7 +383,7 @@ func contextFromReply(session *discordgo.Session, message *discordgo.MessageCrea
 			}
 		}
 		if current.MessageReference != nil && current.MessageReference.MessageID != "" {
-			ref, err := session.ChannelMessage(current.ChannelID, current.MessageReference.MessageID)
+			ref, err := session.ChannelMessage(referenceChannelID(current), current.MessageReference.MessageID)
 			if err == nil {
 				current = ref
 				continue
@@ -390,7 +394,7 @@ func contextFromReply(session *discordgo.Session, message *discordgo.MessageCrea
 	return ""
 }
 
-func referencedMessage(session *discordgo.Session, message *discordgo.MessageCreate) *discordgo.Message {
+func (s *Service) referencedMessage(session *discordgo.Session, message *discordgo.MessageCreate) *discordgo.Message {
 	if message == nil {
 		return nil
 	}
@@ -400,11 +404,45 @@ func referencedMessage(session *discordgo.Session, message *discordgo.MessageCre
 	if session == nil || message.MessageReference == nil || message.MessageReference.MessageID == "" {
 		return nil
 	}
-	referenced, err := session.ChannelMessage(message.ChannelID, message.MessageReference.MessageID)
+	s.replyMu.RLock()
+	cachedText, cached := s.replies[message.MessageReference.MessageID]
+	s.replyMu.RUnlock()
+	if cached {
+		return &discordgo.Message{
+			ID:        message.MessageReference.MessageID,
+			ChannelID: referenceChannelID(message.Message),
+			Author:    session.State.User,
+			Content:   cachedText,
+		}
+	}
+	referenced, err := session.ChannelMessage(referenceChannelID(message.Message), message.MessageReference.MessageID)
 	if err != nil {
 		return nil
 	}
 	return referenced
+}
+
+func referenceChannelID(message *discordgo.Message) string {
+	if message != nil && message.MessageReference != nil && message.MessageReference.ChannelID != "" {
+		return message.MessageReference.ChannelID
+	}
+	if message != nil {
+		return message.ChannelID
+	}
+	return ""
+}
+
+func (s *Service) rememberReply(session *discordgo.Session, channelID, content string) {
+	if session == nil || session.State == nil {
+		return
+	}
+	sent, err := session.ChannelMessageSend(channelID, content)
+	if err != nil || sent == nil || sent.ID == "" {
+		return
+	}
+	s.replyMu.Lock()
+	s.replies[sent.ID] = content
+	s.replyMu.Unlock()
 }
 
 func parseContextCommand(content, prefix, botID string) (string, int, bool, error) {
